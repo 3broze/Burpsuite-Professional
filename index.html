@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Burp Suite Professional — Installer Scripts for Linux, Windows, macOS & NixOS</title>
+<meta name="description" content="Cross-platform installer scripts for Burp Suite Professional. One-line install on Linux, PowerShell setup on Windows, Homebrew on macOS, and a Nix flake for NixOS." />
+<meta name="theme-color" content="#0d0f12" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Burp Suite Professional — Installer Scripts" />
+<meta property="og:description" content="One-line install on Linux, PowerShell setup on Windows, Homebrew on macOS, and a Nix flake for NixOS." />
+<meta property="og:image" content="https://github.com/user-attachments/assets/873ef98a-48e0-445b-b5dc-eb5959ad5b34" />
+
+<link rel="icon" href="burp_suite.ico" />
+
+<style>
+  :root{
+    --bg:#0b0d10;
+    --bg-soft:#11151a;
+    --panel:#151a21;
+    --panel-2:#1a2028;
+    --line:#242c36;
+    --text:#e7edf5;
+    --muted:#95a2b3;
+    --orange:#ff6633;
+    --orange-2:#ff9448;
+    --magenta:#e05fd8;
+    --green:#4ade80;
+    --radius:14px;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--orange-2);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  .wrap{width:min(1080px,92vw);margin-inline:auto}
+
+  /* ---------- header ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(11,13,16,.82);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav{display:flex;align-items:center;gap:22px;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.2px;color:var(--text)}
+  .brand:hover{text-decoration:none}
+  .mark{
+    width:26px;height:26px;border-radius:7px;
+    background:linear-gradient(135deg,var(--orange),#ff2e63);
+    display:grid;place-items:center;font-size:14px;font-weight:900;color:#0b0d10;
+  }
+  .nav nav{margin-left:auto;display:flex;gap:20px;align-items:center}
+  .nav nav a{color:var(--muted);font-size:14.5px;font-weight:500}
+  .nav nav a:hover{color:var(--text);text-decoration:none}
+  .ghbtn{
+    display:inline-flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:var(--panel);
+    padding:7px 13px;border-radius:9px;color:var(--text) !important;font-size:14px;font-weight:600;
+  }
+  .ghbtn:hover{border-color:var(--orange);text-decoration:none}
+  @media(max-width:760px){ .nav nav a.hide-sm{display:none} }
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;overflow:hidden;padding:78px 0 56px;text-align:center}
+  .hero::before{
+    content:"";position:absolute;inset:-40% 0 auto 0;height:620px;
+    background:radial-gradient(ellipse 55% 50% at 50% 40%,rgba(255,102,51,.20),transparent 70%);
+    pointer-events:none;
+  }
+  .hero > *{position:relative}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:var(--panel);
+    color:var(--muted);font-size:13px;padding:5px 13px;border-radius:999px;margin-bottom:22px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  h1{
+    font-size:clamp(2.1rem,5.6vw,3.6rem);line-height:1.08;margin:0 0 18px;
+    letter-spacing:-1.5px;font-weight:800;
+  }
+  h1 .grad{
+    background:linear-gradient(100deg,var(--orange),var(--orange-2) 55%,var(--magenta));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .sub{color:var(--muted);font-size:clamp(1rem,2.2vw,1.16rem);max-width:660px;margin:0 auto 30px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px}
+  .btn{
+    display:inline-flex;align-items:center;gap:9px;
+    padding:12px 22px;border-radius:11px;font-weight:650;font-size:15px;border:1px solid transparent;
+  }
+  .btn-primary{background:linear-gradient(135deg,var(--orange),#ff4d2e);color:#fff !important}
+  .btn-primary:hover{filter:brightness(1.1);text-decoration:none}
+  .btn-ghost{background:var(--panel);border-color:var(--line);color:var(--text) !important}
+  .btn-ghost:hover{border-color:var(--orange);text-decoration:none}
+
+  .shot{
+    border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+    background:var(--panel);box-shadow:0 30px 80px -30px rgba(0,0,0,.9);
+  }
+  .shot-bar{
+    display:flex;align-items:center;gap:7px;padding:10px 14px;
+    background:var(--panel-2);border-bottom:1px solid var(--line);
+  }
+  .tl{width:11px;height:11px;border-radius:50%}
+  .shot img{display:block;width:100%;height:auto}
+
+  /* ---------- sections ---------- */
+  section{padding:72px 0;border-top:1px solid var(--line)}
+  .sec-head{margin-bottom:34px}
+  .eyebrow{color:var(--orange);font-size:12.5px;font-weight:750;letter-spacing:1.6px;text-transform:uppercase;margin:0 0 8px}
+  h2{font-size:clamp(1.5rem,3.4vw,2.05rem);margin:0 0 8px;letter-spacing:-.8px;font-weight:750}
+  .sec-head p{color:var(--muted);margin:0;max-width:640px}
+
+  /* ---------- features ---------- */
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px;
+    transition:border-color .18s ease,transform .18s ease;
+  }
+  .card:hover{border-color:#33404f;transform:translateY(-2px)}
+  .card .ico{font-size:22px;margin-bottom:10px}
+  .card h3{margin:0 0 6px;font-size:1.03rem;font-weight:680}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .tab{
+    background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    padding:9px 17px;border-radius:10px;font:inherit;font-size:14.5px;font-weight:600;cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;transition:.15s;
+  }
+  .tab:hover{color:var(--text);border-color:#33404f}
+  .tab[aria-selected="true"]{background:rgba(255,102,51,.12);border-color:var(--orange);color:var(--orange-2)}
+  .panel[hidden]{display:none}
+
+  .step{display:flex;gap:14px;margin-bottom:18px}
+  .num{
+    flex:none;width:26px;height:26px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);
+    display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--orange-2);margin-top:2px;
+  }
+  .step-body{flex:1;min-width:0}
+  .step-body h4{margin:0 0 6px;font-size:1rem;font-weight:650}
+  .step-body p{margin:0 0 10px;color:var(--muted);font-size:14.5px}
+  .step-body ul{margin:0 0 10px;padding-left:20px;color:var(--muted);font-size:14.5px}
+  .step-body li{margin-bottom:5px}
+
+  /* ---------- code blocks ---------- */
+  .code{
+    position:relative;background:#0a0c0f;border:1px solid var(--line);border-radius:11px;
+    padding:14px 52px 14px 16px;overflow-x:auto;
+  }
+  .code code{font-family:var(--mono);font-size:13.2px;color:#d7e3f0;white-space:pre;display:block;line-height:1.7}
+  .code .cmt{color:#5d6b7c}
+  .code .kw{color:var(--orange-2)}
+  .copy{
+    position:absolute;top:9px;right:9px;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
+    width:32px;height:30px;border-radius:8px;cursor:pointer;font-size:13px;
+    display:grid;place-items:center;transition:.15s;
+  }
+  .copy:hover{color:var(--text);border-color:var(--orange)}
+  .copy.ok{color:var(--green);border-color:var(--green)}
+
+  .note{
+    border-left:3px solid var(--orange);background:rgba(255,102,51,.07);
+    padding:12px 16px;border-radius:0 10px 10px 0;color:var(--muted);font-size:14.3px;margin:16px 0 0;
+  }
+  .note strong{color:var(--text)}
+
+  /* ---------- license steps ---------- */
+  .flow{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));counter-reset:f}
+  .flow .card{position:relative;padding-top:26px}
+  .flow .card::before{
+    counter-increment:f;content:counter(f);
+    position:absolute;top:-12px;left:20px;width:26px;height:26px;border-radius:8px;
+    background:linear-gradient(135deg,var(--orange),#ff4d2e);color:#fff;
+    display:grid;place-items:center;font-size:13px;font-weight:800;
+  }
+
+  /* ---------- faq ---------- */
+  details{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:15px 18px;margin-bottom:10px;
+  }
+  details[open]{border-color:#33404f}
+  summary{cursor:pointer;font-weight:620;list-style:none;display:flex;align-items:center;gap:10px}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"›";color:var(--orange);font-size:20px;transition:transform .2s;line-height:1}
+  details[open] summary::before{transform:rotate(90deg)}
+  details p{color:var(--muted);margin:10px 0 0;font-size:14.6px;padding-left:20px}
+
+  /* ---------- disclaimer ---------- */
+  .warn{
+    border:1px solid #4a3410;background:rgba(255,180,0,.07);
+    border-radius:var(--radius);padding:20px 22px;
+  }
+  .warn h3{margin:0 0 8px;font-size:1.02rem;color:#ffc961}
+  .warn p{margin:0;color:var(--muted);font-size:14.5px}
+  .warn p + p{margin-top:9px}
+
+  /* ---------- footer ---------- */
+  footer{border-top:1px solid var(--line);padding:36px 0;color:var(--muted);font-size:14px}
+  .foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:center}
+  .foot-links{display:flex;gap:18px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top"><span class="mark">B</span> Burp Suite Pro</a>
+    <nav>
+      <a href="#features" class="hide-sm">Features</a>
+      <a href="#install">Install</a>
+      <a href="#license" class="hide-sm">Licensing</a>
+      <a href="#faq" class="hide-sm">FAQ</a>
+      <a class="ghbtn" href="https://github.com/3broze/Burpsuite-Professional" target="_blank" rel="noopener">★ GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="wrap">
+      <span class="pill"><span class="dot"></span> v2026 · Linux · Windows · macOS · NixOS</span>
+      <h1>Burp Suite <span class="grad">Professional</span><br />installed in one command.</h1>
+      <p class="sub">
+        The web security tester's toolkit of choice. This repo packages tested installer
+        scripts, a desktop launcher, and a Nix flake so you can go from a clean machine to a
+        running Burp Suite Pro in under a minute.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#install">⚡ Get started</a>
+        <a class="btn btn-ghost" href="https://portswigger.net/burp/pro" target="_blank" rel="noopener">Official overview ↗</a>
+      </div>
+
+      <div class="shot">
+        <div class="shot-bar">
+          <span class="tl" style="background:#ff5f57"></span>
+          <span class="tl" style="background:#febc2e"></span>
+          <span class="tl" style="background:#28c840"></span>
+        </div>
+        <img src="https://github.com/user-attachments/assets/873ef98a-48e0-445b-b5dc-eb5959ad5b34"
+             alt="Burp Suite Professional dashboard screenshot" loading="lazy" />
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">What you get</p>
+        <h2>Everything wired up for you</h2>
+        <p>Dependencies, JAR download, keygen agent, launcher script, and desktop icons — handled by the scripts in this repository.</p>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <div class="ico">🐧</div>
+          <h3>One-line Linux install</h3>
+          <p>Installs <code>git</code>, <code>wget</code> and an OpenJDK runtime, pulls the JAR, then drops a <code>burpsuitepro</code> command into your PATH.</p>
+        </div>
+        <div class="card">
+          <div class="ico">❄️</div>
+          <h3>NixOS flake</h3>
+          <p>Add the flake to your inputs and install declaratively via <code>environment.systemPackages</code> or home-manager's <code>home.packages</code>.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🪟</div>
+          <h3>Windows PowerShell</h3>
+          <p><code>install.ps1</code> sets up the folder, VBS launcher and Start Menu entry, with a bundled <code>.ico</code> for a native-looking shortcut.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🍎</div>
+          <h3>macOS via Homebrew</h3>
+          <p>Installs <code>openjdk@17</code>, fetches the JAR, and installs a global <code>burp</code> shortcut into <code>/usr/local/bin</code>.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🔑</div>
+          <h3>Loader &amp; activation</h3>
+          <p><code>loader.jar</code> runs as a Java agent and handles the manual activation request/response exchange.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🔄</div>
+          <h3>Simple updates</h3>
+          <p>A single <code>update.sh</code> re-pulls the repo and grabs the latest Burp Suite Professional build.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">Installation</p>
+        <h2>Pick your platform</h2>
+        <p>Copy the commands below. Everything runs from the repository root.</p>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true"  aria-controls="p-linux"   id="t-linux">🐧 Linux</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="p-nixos"   id="t-nixos">❄️ NixOS</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="p-windows" id="t-windows">🪟 Windows</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="p-macos"   id="t-macos">🍎 macOS</button>
+      </div>
+
+      <!-- LINUX -->
+      <div class="panel" id="p-linux" role="tabpanel" aria-labelledby="t-linux">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="step-body">
+            <h4>Install</h4>
+            <p>Debian / Ubuntu / Kali and derivatives:</p>
+            <div class="code"><code>sudo apt update &amp;&amp; sudo apt install -y wget &amp;&amp; \
+wget -qO- https://raw.githubusercontent.com/xiv3r/Burpsuite-Professional/main/install.sh | sudo bash</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <div class="step-body">
+            <h4>Run</h4>
+            <div class="code"><code>burpsuitepro</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <div class="step-body">
+            <h4>Update (optional)</h4>
+            <div class="code"><code>cd &amp;&amp; sudo rm -rf Burpsuite-Professional &amp;&amp; \
+wget -qO- https://raw.githubusercontent.com/xiv3r/Burpsuite-Professional/refs/heads/main/update.sh | sudo bash</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">4</div>
+          <div class="step-body">
+            <h4>Wrong Java version?</h4>
+            <p>Select the default OpenJDK runtime:</p>
+            <div class="code"><code>sudo update-alternatives --config java</code></div>
+          </div>
+        </div>
+        <div class="note">
+          <strong>Desktop launcher (XFCE):</strong> right-click the desktop → Create Launcher → name it
+          “Burpsuite Professional”, set the command to <code>burpsuitepro</code>, and pick the Burp Suite icon.
+        </div>
+      </div>
+
+      <!-- NIXOS -->
+      <div class="panel" id="p-nixos" role="tabpanel" aria-labelledby="t-nixos" hidden>
+        <div class="step">
+          <div class="num">1</div>
+          <div class="step-body">
+            <h4>Add the flake to your inputs</h4>
+            <div class="code"><code><span class="cmt"># flake.nix</span>
+{
+  inputs = {
+    burpsuitepro = {
+      type = "github";
+      owner = "xiv3r";
+      repo = "Burpsuite-Professional";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+}</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <div class="step-body">
+            <h4>Install the package (NixOS module)</h4>
+            <div class="code"><code>{ inputs, ... }: {
+  environment.systemPackages = [
+    inputs.burpsuitepro.packages.${system}.default
+  ];
+}</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <div class="step-body">
+            <h4>…or with home-manager</h4>
+            <div class="code"><code>{ inputs, ... }: {
+  home.packages = [
+    inputs.burpsuitepro.packages.${system}.default
+  ];
+}</code></div>
+          </div>
+        </div>
+        <div class="note">
+          <strong>Note:</strong> <code>loader.jar</code> is symlinked next to <code>burpsuite.jar</code> so Burp recognises
+          the license keys. The <code>loader</code> command is available from the terminal only.
+        </div>
+      </div>
+
+      <!-- WINDOWS -->
+      <div class="panel" id="p-windows" role="tabpanel" aria-labelledby="t-windows" hidden>
+        <div class="step">
+          <div class="num">1</div>
+          <div class="step-body">
+            <h4>Prepare the folder</h4>
+            <p>Create <code>C:\Burp</code>, then
+              <a href="https://codeload.github.com/xiv3r/Burpsuite-Professional/zip/refs/heads/main" target="_blank" rel="noopener">download the repo ZIP</a>
+              and extract its contents into that folder.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <div class="step-body">
+            <h4>Allow script execution</h4>
+            <p>Open PowerShell <em>as administrator</em>:</p>
+            <div class="code"><code>Set-ExecutionPolicy -ExecutionPolicy bypass -Scope process</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <div class="step-body">
+            <h4>Run the installer</h4>
+            <div class="code"><code>cd C:\Burp
+.\install.ps1</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">4</div>
+          <div class="step-body">
+            <h4>Create the shortcut</h4>
+            <ul>
+              <li>Right-click <code>Burp-Suite-Pro.vbs</code> → Shortcut tab → <em>Change Icon</em></li>
+              <li>Choose <code>C:\Burp\burp_suite.ico</code></li>
+              <li>Copy the shortcut to your Desktop</li>
+            </ul>
+            <p>For a Start Menu entry, copy <code>Burp-Suite-Pro.vbs</code> to:</p>
+            <div class="code"><code>C:\ProgramData\Microsoft\Windows\Start Menu\Programs\</code></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MACOS -->
+      <div class="panel" id="p-macos" role="tabpanel" aria-labelledby="t-macos" hidden>
+        <div class="step">
+          <div class="num">1</div>
+          <div class="step-body">
+            <h4>Install dependencies with Homebrew</h4>
+            <div class="code"><code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install git openjdk@17</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <div class="step-body">
+            <h4>Run the installation script</h4>
+            <p>Clones the repo, downloads the JAR, and starts the key generator and Burp Suite.</p>
+            <div class="code"><code>curl -fsSL https://raw.githubusercontent.com/xiv3r/Burpsuite-Professional/main/install_macos.sh | bash</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <div class="step-body">
+            <h4>Install the <code>burp</code> shortcut</h4>
+            <div class="code"><code>chmod +x burp
+sudo cp burp /usr/local/bin/burp</code></div>
+          </div>
+        </div>
+        <div class="note">
+          <strong>Heads-up:</strong> the generated script uses <code>$(pwd)</code>, so run <code>burp</code> from the
+          <code>Burpsuite-Professional</code> directory containing <code>loader.jar</code> and the Burp JAR — or replace
+          <code>$(pwd)</code> with absolute paths for true global use.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LICENSE -->
+  <section id="license">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">Activation</p>
+        <h2>Setting up the license</h2>
+        <p>The loader window and Burp's manual activation dialog exchange two keys.</p>
+      </div>
+      <div class="flow">
+        <div class="card"><h3>Copy the license</h3><p>Grab the license string from the loader window.</p></div>
+        <div class="card"><h3>Paste into Burp</h3><p>Burp Suite → <em>Manual activation</em> → paste the license.</p></div>
+        <div class="card"><h3>Request key → loader</h3><p>Copy Burp's activation request key into the loader's request field.</p></div>
+        <div class="card"><h3>Response key → Burp</h3><p>Copy the loader's response key back into Burp to finish.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">FAQ</p>
+        <h2>Common questions</h2>
+      </div>
+
+      <details open>
+        <summary>Which Java version do I need?</summary>
+        <p>The Linux script installs <code>openjdk-21-jre</code>; the macOS path uses <code>openjdk@17</code>. If Burp fails to start, switch your default runtime with <code>sudo update-alternatives --config java</code>.</p>
+      </details>
+      <details>
+        <summary>Burp starts but the license won't activate</summary>
+        <p>Make sure <code>loader.jar</code> is passed as the <code>-javaagent</code> and sits next to the Burp JAR. On NixOS it is symlinked automatically. Re-run the manual activation flow described above.</p>
+      </details>
+      <details>
+        <summary>How do I launch it after installing on Linux?</summary>
+        <p>The installer writes a <code>burpsuitepro</code> script to <code>/bin</code>, so just run <code>burpsuitepro</code> from any terminal, or wire it to a desktop launcher.</p>
+      </details>
+      <details>
+        <summary>Where does the Burp Suite JAR come from?</summary>
+        <p>The scripts fetch <code>burpsuite_pro_v&lt;version&gt;.jar</code> from this repository's GitHub Releases. Change the <code>version</code> variable in <code>install.sh</code> to pin a different build.</p>
+      </details>
+      <details>
+        <summary>Can I contribute or report an issue?</summary>
+        <p>Yes — open an issue or pull request on the <a href="https://github.com/3broze/Burpsuite-Professional" target="_blank" rel="noopener">GitHub repository</a>.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- DISCLAIMER -->
+  <section id="disclaimer">
+    <div class="wrap">
+      <div class="warn">
+        <h3>⚠️ Legal &amp; ethical notice</h3>
+        <p>Burp Suite Professional is commercial software by <a href="https://portswigger.net/burp/pro" target="_blank" rel="noopener">PortSwigger</a>.
+        This repository is not affiliated with, endorsed by, or supported by PortSwigger. For production, commercial or
+        professional work, buy a legitimate license.</p>
+        <p>Only test systems you own or have explicit written permission to assess. Everything here is provided as-is,
+        for educational and research purposes, with no warranty of any kind.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>Built for the <a href="https://github.com/3broze/Burpsuite-Professional" target="_blank" rel="noopener">Burpsuite-Professional</a> repository.</div>
+    <div class="foot-links">
+      <a href="https://portswigger.net/burp/pro" target="_blank" rel="noopener">PortSwigger</a>
+      <a href="https://github.com/h3110w0r1d-y/BurpLoaderKeygen" target="_blank" rel="noopener">Loader credit</a>
+      <a href="https://github.com/cyb3rzest/Burp-Suite-Pro" target="_blank" rel="noopener">Script credit</a>
+      <a href="#top">Back to top ↑</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Tabs
+  const tabs = [...document.querySelectorAll('.tab')];
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => {
+        const on = t === tab;
+        t.setAttribute('aria-selected', on);
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  // Auto-select platform tab from user agent
+  (() => {
+    const p = navigator.userAgent;
+    let id = null;
+    if (/Windows/i.test(p)) id = 't-windows';
+    else if (/Mac OS X|Macintosh/i.test(p)) id = 't-macos';
+    if (id) document.getElementById(id)?.click();
+  })();
+
+  // Copy buttons
+  document.querySelectorAll('.code').forEach(block => {
+    const btn = document.createElement('button');
+    btn.className = 'copy';
+    btn.type = 'button';
+    btn.title = 'Copy';
+    btn.setAttribute('aria-label', 'Copy code');
+    btn.textContent = '⧉';
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(block.querySelector('code').innerText);
+      } catch {
+        const r = document.createRange();
+        r.selectNodeContents(block.querySelector('code'));
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+        document.execCommand('copy'); s.removeAllRanges();
+      }
+      btn.textContent = '✓'; btn.classList.add('ok');
+      setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('ok'); }, 1400);
+    });
+    block.appendChild(btn);
+  });
+</script>
+</body>
+</html>
