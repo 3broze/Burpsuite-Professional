@@ -16,9 +16,7 @@ const DIR_LEFT = { x: -1, y: 0, angle: 1.0 * Math.PI };
 const DIR_RIGHT = { x: 1, y: 0, angle: 0.0 * Math.PI };
 
 // Maze definitions (0: Empty, 1: Wall, 2: Dot, 3: Energizer, 4: Ghost House Door, 5: Ghost House Interior)
-// 4 different maze layouts for variety across stages
 const MAZE_LAYOUTS = [
-    // Level 1: Classic Ms. Pac-Man style maze
     [
         [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
         [1,3,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,3,1],
@@ -56,13 +54,13 @@ const MAZE_LAYOUTS = [
 
 // Fruit types and values
 const FRUITS = [
-    { name: 'Cherry', points: 100, color: '#ff0000', shape: 'cherry' },
-    { name: 'Strawberry', points: 200, color: '#ff3366', shape: 'strawberry' },
-    { name: 'Peach', points: 500, color: '#ff9933', shape: 'peach' },
-    { name: 'Pretzel', points: 700, color: '#cc9966', shape: 'pretzel' },
-    { name: 'Apple', points: 1000, color: '#33cc33', shape: 'apple' },
-    { name: 'Pear', points: 2000, color: '#66ff66', shape: 'pear' },
-    { name: 'Banana', points: 5000, color: '#ffff33', shape: 'banana' }
+    { name: 'Cherry', points: 100, color: '#ff0000' },
+    { name: 'Strawberry', points: 200, color: '#ff3366' },
+    { name: 'Peach', points: 500, color: '#ff9933' },
+    { name: 'Pretzel', points: 700, color: '#cc9966' },
+    { name: 'Apple', points: 1000, color: '#33cc33' },
+    { name: 'Pear', points: 2000, color: '#66ff66' },
+    { name: 'Banana', points: 5000, color: '#ffff33' }
 ];
 
 // Audio System using Web Audio API
@@ -70,8 +68,6 @@ class SoundSystem {
     constructor() {
         this.ctx = null;
         this.enabled = true;
-        this.sirenOsc = null;
-        this.sirenGain = null;
         this.wakaState = false;
     }
 
@@ -94,13 +90,13 @@ class SoundSystem {
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
             osc.type = 'square';
-            osc.frequency.setValueAtTime(freq, now + i * 0.1);
-            gain.gain.setValueAtTime(0.1, now + i * 0.1);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.09);
+            osc.frequency.setValueAtTime(freq, now + i * 0.08);
+            gain.gain.setValueAtTime(0.1, now + i * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.07);
             osc.connect(gain);
             gain.connect(this.ctx.destination);
-            osc.start(now + i * 0.1);
-            osc.stop(now + i * 0.1 + 0.1);
+            osc.start(now + i * 0.08);
+            osc.stop(now + i * 0.08 + 0.08);
         });
     }
 
@@ -114,12 +110,12 @@ class SoundSystem {
         const freq = this.wakaState ? 250 : 180;
         this.wakaState = !this.wakaState;
         osc.frequency.setValueAtTime(freq, now);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
         osc.connect(gain);
         gain.connect(this.ctx.destination);
         osc.start(now);
-        osc.stop(now + 0.09);
+        osc.stop(now + 0.07);
     }
 
     playEnergizer() {
@@ -131,7 +127,7 @@ class SoundSystem {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(440, now);
         osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
-        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.setValueAtTime(0.15, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
         osc.connect(gain);
         gain.connect(this.ctx.destination);
@@ -148,7 +144,7 @@ class SoundSystem {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, now);
         osc.frequency.linearRampToValueAtTime(600, now + 0.3);
-        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.setValueAtTime(0.15, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
         osc.connect(gain);
         gain.connect(this.ctx.destination);
@@ -165,13 +161,13 @@ class SoundSystem {
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, now + i * 0.06);
-            gain.gain.setValueAtTime(0.15, now + i * 0.06);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.06 + 0.08);
+            osc.frequency.setValueAtTime(freq, now + i * 0.05);
+            gain.gain.setValueAtTime(0.12, now + i * 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.05 + 0.06);
             osc.connect(gain);
             gain.connect(this.ctx.destination);
-            osc.start(now + i * 0.06);
-            osc.stop(now + i * 0.06 + 0.09);
+            osc.start(now + i * 0.05);
+            osc.stop(now + i * 0.05 + 0.07);
         });
     }
 
@@ -183,13 +179,13 @@ class SoundSystem {
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(400, now);
-        osc.frequency.linearRampToValueAtTime(80, now + 0.8);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        osc.frequency.linearRampToValueAtTime(80, now + 0.6);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
         osc.connect(gain);
         gain.connect(this.ctx.destination);
         osc.start(now);
-        osc.stop(now + 0.85);
+        osc.stop(now + 0.65);
     }
 }
 
@@ -201,8 +197,7 @@ class Game {
         this.sound = new SoundSystem();
 
         this.score = 0;
-        this.highScore = localStorage.getItem('ms_web_man_highscore') || 10000;
-        document.getElementById('high-score5') // handled in updateUI
+        this.highScore = parseInt(localStorage.getItem('ms_web_man_highscore') || '10000', 10);
         this.lives = 3;
         this.level = 1;
         this.dotsLeft = 0;
@@ -228,51 +223,59 @@ class Game {
     }
 
     initEventListeners() {
+        const handleDirectionInput = (dir) => {
+            this.sound.init();
+            if (this.state === 'START') {
+                this.startGame();
+            } else if (this.state === 'PLAYING' && this.player) {
+                this.player.setNextDirection(dir);
+            }
+        };
+
         window.addEventListener('keydown', (e) => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Enter'].includes(e.code)) {
                 e.preventDefault();
             }
 
-            if (this.state === 'PLAYING') {
-                switch(e.code) {
-                    case 'ArrowUp':
-                    case 'KeyW':
-                        this.player.setNextDirection(DIR_UP);
-                        break;
-                    case 'ArrowDown':
-                    case 'KeyS':
-                        this.player.setNextDirection(DIR_DOWN);
-                        break;
-                    case 'ArrowLeft':
-                    case 'KeyA':
-                        this.player.setNextDirection(DIR_LEFT);
-                        break;
-                    case 'ArrowRight':
-                    case 'KeyD':
-                        this.player.setNextDirection(DIR_RIGHT);
-                        break;
-                    case 'Space':
+            switch(e.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    handleDirectionInput(DIR_UP);
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    handleDirectionInput(DIR_DOWN);
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    handleDirectionInput(DIR_LEFT);
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    handleDirectionInput(DIR_RIGHT);
+                    break;
+                case 'Space':
+                case 'Enter':
+                    if (this.state === 'START') {
+                        this.startGame();
+                    } else if (this.state === 'GAME_OVER') {
+                        this.resetGame();
+                    } else if (this.state === 'PLAYING' || this.state === 'PAUSED') {
                         this.togglePause();
-                        break;
-                }
-            } else if (this.state === 'START' && (e.code === 'Space' || e.code === 'Enter')) {
-                this.startGame();
-            } else if (this.state === 'GAME_OVER' && (e.code === 'Space' || e.code === 'Enter')) {
-                this.resetGame();
+                    }
+                    break;
             }
         });
 
-        // Touch Virtual Pad buttons
+        // Touch and mouse Virtual Pad buttons
         const bindPad = (id, dir) => {
             const btn = document.getElementById(id);
             if (!btn) return;
             const trigger = (e) => {
                 e.preventDefault();
-                if (this.state === 'PLAYING' && this.player) {
-                    this.player.setNextDirection(dir);
-                }
+                handleDirectionInput(dir);
             };
-            btn.addEventListener('touchstart', trigger);
+            btn.addEventListener('touchstart', trigger, { passive: false });
             btn.addEventListener('mousedown', trigger);
         };
 
@@ -281,13 +284,31 @@ class Game {
         bindPad('btn-left', DIR_LEFT);
         bindPad('btn-right', DIR_RIGHT);
 
-        document.getElementById('start-btn').addEventListener('click', () => {
-            this.startGame();
-        });
+        const startBtn = document.getElementById('start-btn');
+        if (startBtn) {
+            startBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.startGame();
+            });
+        }
 
-        document.getElementById('restart-btn').addEventListener('click', () => {
-            this.resetGame();
-        });
+        const restartBtn = document.getElementById('restart-btn');
+        if (restartBtn) {
+            restartBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.resetGame();
+            });
+        }
+
+        // Clicking anywhere on start screen starts the game
+        const startScreen = document.getElementById('start-screen');
+        if (startScreen) {
+            startScreen.addEventListener('click', () => {
+                if (this.state === 'START') {
+                    this.startGame();
+                }
+            });
+        }
 
         document.getElementById('sound-btn').addEventListener('click', () => {
             this.sound.enabled = !this.sound.enabled;
@@ -319,11 +340,9 @@ class Game {
     }
 
     loadLevel(lvl) {
-        // Deep copy maze layout
         const template = MAZE_LAYOUTS[(lvl - 1) % MAZE_LAYOUTS.length];
         this.maze = template.map(row => [...row]);
 
-        // Count dots
         this.dotsLeft = 0;
         this.dotsEaten = 0;
         for (let r = 0; r < ROWS; r++) {
@@ -334,15 +353,12 @@ class Game {
             }
         }
 
-        // Initialize Player
         this.player = new Player(13.5 * TILE_SIZE, 23 * TILE_SIZE);
-
-        // Initialize Ghosts: Blinky (Red), Pinky (Pink), Inky (Cyan), Sue (Orange)
         this.ghosts = [
             new Ghost(13.5 * TILE_SIZE, 11 * TILE_SIZE, '#ff0000', 'blinky'),
             new Ghost(13.5 * TILE_SIZE, 14 * TILE_SIZE, '#ffb8ff', 'pinky'),
-            (this.level % 2 === 0)? new Ghost(11.5 * TILE_SIZE, 14 * TILE_SIZE, '#00ffff', 'inky') : new Ghost(11.5 * TILE_SIZE, 14 * TILE_SIZE, '#00ffff', 'inky'),
-            (this.level % 2 === 0)? new Ghost(15.5 * TILE_SIZE, 14 * TILE_SIZE, '#ffb852', 'sue') : new Ghost(15.5 * TILE_SIZE, 14 * TILE_SIZE, '#ffb852', 'sue')
+            new Ghost(11.5 * TILE_SIZE, 14 * TILE_SIZE, '#00ffff', 'inky'),
+            new Ghost(15.5 * TILE_SIZE, 14 * TILE_SIZE, '#ffb852', 'sue')
         ];
 
         this.fruit = null;
@@ -353,7 +369,7 @@ class Game {
 
     startReadyCountdown() {
         this.state = 'READY';
-        this.stateTimer = 150; // frames (~2.5s)
+        this.stateTimer = 45; // Shortened to ~0.75s for instant snappy play
     }
 
     togglePause() {
@@ -369,7 +385,6 @@ class Game {
         document.getElementById('high-score').textContent = String(this.highScore).padStart(5, '0');
         document.getElementById('level-display').textContent = this.level;
 
-        // Render lives icons (Ms. Web-Man mini icon)
         const livesContainer = document.getElementById('lives-display');
         livesContainer.innerHTML = '';
         for (let i = 0; i < this.lives - 1; i++) {
@@ -378,13 +393,11 @@ class Game {
             canvasMini.height = 16;
             canvasMini.className = 'mini-icon';
             const mCtx = canvasMini.getContext('2d');
-            // Draw mini Ms. Pac-Man with bow
             mCtx.fillStyle = '#ffff00';
             mCtx.beginPath();
             mCtx.arc(8, 9, 6, 0.2 * Math.PI, 1.8 * Math.PI);
             mCtx.lineTo(8, 9);
             mCtx.fill();
-            // Bow
             mCtx.fillStyle = '#ff007f';
             mCtx.fillRect(7, 1, 2, 4);
             mCtx.fillRect(5, 2, 6, 2);
@@ -421,7 +434,7 @@ class Game {
 
         if (this.state === 'DYING') {
             this.stateTimer--;
-            this.player.deathAnimProgress += 0.05;
+            this.player.deathAnimProgress += 0.04;
             if (this.stateTimer <= 0) {
                 this.lives--;
                 this.updateUI();
@@ -448,7 +461,6 @@ class Game {
 
         if (this.state !== 'PLAYING') return;
 
-        // Frightened timer countdown
         if (this.frightenedTimer > 0) {
             this.frightenedTimer -= 1000 / 60;
             if (this.frightenedTimer <= 0) {
@@ -459,33 +471,28 @@ class Game {
             }
         }
 
-        // Fruit management
         if (this.fruit) {
             this.fruitTimer--;
             if (this.fruitTimer <= 0) {
                 this.fruit = null;
             } else {
-                // Check collision with player
                 const pTile = this.player.getTileCoord();
                 const fTile = { x: Math.floor(this.fruit.x / TILE_SIZE), y: Math.floor(this.fruit.y / TILE_SIZE) };
                 if (pTile.x === fTile.x && pTile.y === fTile.y) {
                     this.score += this.fruit.points;
                     this.sound.playFruit();
-                    // Show score popup or notification
                     this.fruit = null;
                     this.updateUI();
                 }
             }
         }
 
-        // Update Player
         this.player.update(this.maze);
 
-        // Check Dot Collision
         const tile = this.player.getTileCoord();
         if (tile.x >= 0 && tile.x < COLS && tile.y >= 0 && tile.y < ROWS) {
             const cell = this.maze[tile.y][tile.x];
-            if (cell === 2) { // Dot
+            if (cell === 2) {
                 this.maze[tile.y][tile.x] = 0;
                 this.score += 10;
                 this.dotsLeft--;
@@ -497,7 +504,7 @@ class Game {
                     this.levelComplete();
                     return;
                 }
-            } else if (cell === 3) { // Energizer
+            } else if (cell === 3) {
                 this.maze[tile.y][tile.x] = 0;
                 this.score += 50;
                 this.dotsLeft--;
@@ -512,29 +519,24 @@ class Game {
             }
         }
 
-        // Update Ghosts
         this.ghosts.forEach(ghost => {
             ghost.update(this.maze, this.player);
 
-            // Check collision with player
             const dist = Math.hypot(ghost.x - this.player.x, ghost.y - this.player.y);
             if (dist < TILE_SIZE * 0.75) {
                 if (ghost.state === 'FRIGHTENED') {
-                    // Eat ghost
                     ghost.state = 'EATEN';
                     this.eatenGhostsCount++;
-                    const pts = Math.pow(2, this.eatenGhostsCount) * 100; // 200, 400, 800, 1600
+                    const pts = Math.pow(2, this.eatenGhostsCount) * 100;
                     this.score += pts;
                     this.sound.playEatGhost();
                     this.updateUI();
                 } else if (ghost.state === 'CHASE' || ghost.state === 'SCATTER') {
-                    // Player dies
                     this.triggerPlayerDeath();
                 }
             }
         });
 
-        // High score update
         if (this.score > this.highScore) {
             this.highScore = this.score;
             localStorage.setItem('ms_web_man_highscore', this.highScore);
@@ -550,7 +552,7 @@ class Game {
                 y: 17 * TILE_SIZE,
                 ...fData
             };
-            this.fruitTimer = 600; // 10 seconds at 60fps
+            this.fruitTimer = 600;
         }
     }
 
@@ -567,7 +569,7 @@ class Game {
 
     triggerPlayerDeath() {
         this.state = 'DYING';
-        this.stateTimer = 90; // 1.5s
+        this.stateTimer = 75;
         this.player.deathAnimProgress = 0;
         this.sound.playDeath();
     }
@@ -588,57 +590,54 @@ class Game {
     render() {
         this.ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // Draw Maze Walls & Dots
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
                 const cell = this.maze[r][c];
                 const x = c * TILE_SIZE;
                 const y = r * TILE_SIZE;
 
-                if (cell === 1) { // Wall
+                if (cell === 1) {
                     this.ctx.fillStyle = '#1919a6';
                     this.ctx.strokeStyle = '#2222ff';
                     this.ctx.lineWidth = 1;
                     this.ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-                    // Add subtle inner border for arcade retro look
                     this.ctx.strokeRect(x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
-                } else if (cell === 2) { // Dot
+                } else if (cell === 2) {
                     this.ctx.fillStyle = '#ffb8ae';
                     this.ctx.beginPath();
                     this.ctx.arc(x + TILE_SIZE / 2, y + TILE_SIZE / 2, 2.5, 0, 2 * Math.PI);
                     this.ctx.fill();
-                } else if (cell === 3) { // Energizer
-                    // Flashing energizer
+                } else if (cell === 3) {
                     if (Math.floor(Date.now() / 200) % 2 === 0) {
                         this.ctx.fillStyle = '#ffb8ae';
                         this.ctx.beginPath();
                         this.ctx.arc(x + TILE_SIZE / 2, y + TILE_SIZE / 2, 6, 0, 2 * Math.PI);
                         this.ctx.fill();
                     }
-                } else if (cell === 4) { // Ghost House Door
+                } else if (cell === 4) {
                     this.ctx.fillStyle = '#ffb8ff';
                     this.ctx.fillRect(x, y + 6, TILE_SIZE, 4);
                 }
             }
         }
 
-        // Draw Fruit
         if (this.fruit) {
             this.renderFruit();
         }
 
-        // Draw Ghosts
         this.ghosts.forEach(ghost => ghost.render(this.ctx));
-
-        // Draw Player
         this.player.render(this.ctx, this.state);
 
-        // Draw Ready message
         if (this.state === 'READY') {
             this.ctx.font = '14px "Press Start 2P"';
             this.ctx.fillStyle = '#ffff00';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('READY!', CANVAS_WIDTH / 2, 17 * TILE_SIZE);
+        } else if (this.state === 'PAUSED') {
+            this.ctx.font = '14px "Press Start 2P"';
+            this.ctx.fillStyle = '#00ffff';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('PAUSED', CANVAS_WIDTH / 2, 17 * TILE_SIZE);
         }
     }
 
@@ -649,13 +648,12 @@ class Game {
         this.ctx.beginPath();
         this.ctx.arc(fx + TILE_SIZE/2, fy + TILE_SIZE/2, 6, 0, 2 * Math.PI);
         this.ctx.fill();
-        // Leaf/Stem
         this.ctx.fillStyle = '#00ff00';
         this.ctx.fillRect(fx + 6, fy + 2, 4, 3);
     }
 }
 
-// Player (Ms. Web-Man) Class
+// Player Class
 class Player {
     constructor(x, y) {
         this.startX = x;
@@ -676,6 +674,10 @@ class Player {
 
     setNextDirection(dir) {
         this.nextDir = dir;
+        // Immediate cornering / instant turn if reversing or aligned
+        if (dir.x === -this.dir.x && dir.y === -this.dir.y) {
+            this.dir = dir;
+        }
     }
 
     getTileCoord() {
@@ -686,25 +688,21 @@ class Player {
     }
 
     update(maze) {
-        // Try turning to nextDir if aligned to grid
         if (this.isAligned()) {
             if (this.canMove(maze, this.nextDir)) {
                 this.dir = this.nextDir;
             }
         }
 
-        // Check if can move in current direction
         if (this.canMove(maze, this.dir)) {
             this.x += this.dir.x * this.speed;
             this.y += this.dir.y * this.speed;
 
-            // Animate mouth
             this.mouthAngle += this.mouthSpeed;
             if (this.mouthAngle > 0.4 || this.mouthAngle < 0.05) {
                 this.mouthSpeed = -this.mouthSpeed;
             }
 
-            // Screen wrap tunnel
             if (this.x < -TILE_SIZE / 2) {
                 this.x = CANVAS_WIDTH - TILE_SIZE / 2;
             } else if (this.x > CANVAS_WIDTH - TILE_SIZE / 2) {
@@ -722,7 +720,6 @@ class Player {
         const nextX = this.x + dir.x * this.speed;
         const nextY = this.y + dir.y * this.speed;
 
-        // Allow tunnel wrapping
         if (nextX < 0 || nextX >= CANVAS_WIDTH - TILE_SIZE) return true;
 
         const tileX = Math.floor((nextX + TILE_SIZE / 2) / TILE_SIZE);
@@ -730,7 +727,7 @@ class Player {
 
         if (tileY < 0 || tileY >= ROWS || tileX < 0 || tileX >= COLS) return false;
         const cell = maze[tileY][tileX];
-        return cell !== 1 && cell !== 4; // Can't walk through walls or ghost door from outside
+        return cell !== 1 && cell !== 4;
     }
 
     render(ctx, gameState) {
@@ -738,7 +735,6 @@ class Player {
         ctx.translate(this.x + TILE_SIZE / 2, this.y + TILE_SIZE / 2);
 
         if (gameState === 'DYING') {
-            // Death animation: collapsing arc
             ctx.fillStyle = '#ffff00';
             ctx.beginPath();
             const radius = TILE_SIZE / 2 * (1 - this.deathAnimProgress);
@@ -757,16 +753,15 @@ class Player {
 
         ctx.rotate(rotation);
 
-        // Body
         ctx.fillStyle = '#ffff00';
         ctx.beginPath();
         ctx.arc(0, 0, TILE_SIZE / 2 - 1, this.mouthAngle * Math.PI, (2 - this.mouthAngle) * Math.PI);
         ctx.lineTo(0, 0);
         ctx.fill();
 
-        // Ms. Web-Man signature bow
+        // Bow
         ctx.fillStyle = '#ff007f';
-        ctx.fillRect(-2, -10, 4, 4); // bow center
+        ctx.fillRect(-2, -10, 4, 4);
         ctx.beginPath();
         ctx.moveTo(-2, -8);
         ctx.lineTo(-8, -13);
@@ -780,7 +775,6 @@ class Player {
         ctx.closePath();
         ctx.fill();
 
-        // Eye
         ctx.fillStyle = '#000';
         ctx.beginPath();
         ctx.arc(1, -5, 1.5, 0, 2 * Math.PI);
@@ -805,7 +799,7 @@ class Ghost {
         this.y = this.startY;
         this.dir = DIR_UP;
         this.speed = 1.75;
-        this.state = 'CHASE'; // CHASE, FRIGHTENED, EATEN
+        this.state = 'CHASE';
     }
 
     getTileCoord() {
@@ -820,10 +814,8 @@ class Ghost {
     }
 
     update(maze, player) {
-        // Simple intelligent arcade AI grid movement at intersections
         if (Math.abs(this.x % TILE_SIZE) < 0.1 && Math.abs(this.y % TILE_SIZE) < 0.1) {
             const validDirs = [DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT].filter(d => {
-                // Prevent immediate reverse unless necessary
                 if (d.x === -this.dir.x && d.y === -this.dir.y) return false;
                 return this.canMove(maze, d);
             });
@@ -833,10 +825,8 @@ class Ghost {
             }
 
             if (this.state === 'FRIGHTENED') {
-                // Choose random direction
                 this.dir = validDirs[Math.floor(Math.random() * validDirs.length)];
             } else if (this.state === 'EATEN') {
-                // Head back to ghost house (13.5, 14)
                 const targetX = 13.5 * TILE_SIZE;
                 const targetY = 14 * TILE_SIZE;
                 let bestDir = validDirs[0];
@@ -855,20 +845,16 @@ class Ghost {
                     this.state = 'CHASE';
                 }
             } else {
-                // Chase player based on ghost personality
                 let targetX = player.x;
                 let targetY = player.y;
 
                 if (this.type === 'pinky') {
-                    // Ambushes ahead of player
                     targetX += player.dir.x * TILE_SIZE * 4;
                     targetY += player.dir.y * TILE_SIZE * 4;
                 } else if (this.type === 'inky') {
-                    // Flanks
                     targetX += (player.x - this.x) * 0.5;
                     targetY += (player.y - this.y) * 0.5;
                 } else if (this.type === 'sue') {
-                    // Wanders if close
                     const dist = Math.hypot(this.x - player.x, this.y - player.y);
                     if (dist < TILE_SIZE * 5) {
                         targetX = 0;
@@ -895,7 +881,6 @@ class Ghost {
         this.x += this.dir.x * currentSpeed;
         this.y += this.dir.y * currentSpeed;
 
-        // Screen wrap
         if (this.x < -TILE_SIZE / 2) this.x = CANVAS_WIDTH - TILE_SIZE / 2;
         else if (this.x > CANVAS_WIDTH - TILE_SIZE / 2) this.x = -TILE_SIZE / 2;
     }
@@ -912,7 +897,7 @@ class Ghost {
 
         if (tileY < 0 || tileY >= ROWS || tileX < 0 || tileX >= COLS) return false;
         const cell = maze[tileY][tileX];
-        return cell !== 1; // Ghosts can go through ghost door
+        return cell !== 1;
     }
 
     render(ctx) {
@@ -921,20 +906,17 @@ class Ghost {
 
         let ghostColor = this.color;
         if (this.state === 'FRIGHTENED') {
-            ghostColor = '#2121ff'; // Blue
+            ghostColor = '#2121ff';
         } else if (this.state === 'EATEN') {
-            // Draw eyes only
             this.renderEyes(ctx);
             ctx.restore();
             return;
         }
 
-        // Ghost Head
         ctx.fillStyle = ghostColor;
         ctx.beginPath();
         ctx.arc(0, -2, TILE_SIZE / 2 - 1, Math.PI, 0, false);
         ctx.lineTo(TILE_SIZE / 2 - 1, TILE_SIZE / 2);
-        // Skirt waves
         ctx.lineTo(TILE_SIZE / 2 - 3, TILE_SIZE / 2 - 2);
         ctx.lineTo(TILE_SIZE / 4, TILE_SIZE / 2);
         ctx.lineTo(0, TILE_SIZE / 2 - 2);
