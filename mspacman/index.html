@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ms. Web-Man - Arcade Browser Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="arcade-container">
+        <header class="arcade-header">
+            <h1 class="game-title">MS. <span class="highlight">WEB-MAN</span></h1>
+            <div class="score-board">
+                <div class="score-box">
+                    <span class="label">1UP</span>
+                    <span id="score" class="value">00000</span>
+                </div>
+                <div class="score-box">
+                    <span class="label">HIGH SCORE</span>
+                    <span id="high-score" class="value">10000</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="game-screen-wrapper">
+            <div id="crt-overlay" class="crt scanlines"></div>
+            <canvas id="gameCanvas" width="448" height="496"></canvas>
+            
+            <!-- Overlay screens -->
+            <div id="start-screen" class="screen overlay">
+                <h2>MS. WEB-MAN</h2>
+                <p class="subtitle">THE ARCADE CLASSIC</p>
+                <div class="instructions">
+                    <p>USE <span class="key">ARROWS</span> OR <span class="key">WASD</span> TO MOVE</p>
+                    <p>PRESS <span class="key">SPACE</span> TO START / PAUSE</p>
+                    <p>EAT ALL DOTS &amp; AVOID GHOSTS!</p>
+                </div>
+                <button id="start-btn" class="arcade-btn">INSERT COIN / START</button>
+            </div>
+
+            <div id="game-over-screen" class="screen overlay hidden">
+                <h2 class="game-over-text">GAME OVER</h2>
+                <p>FINAL SCORE: <span id="final-score">0</span></p>
+                <button id="restart-btn" class="arcade-btn">PLAY AGAIN</button>
+            </div>
+
+            <div id="level-complete-screen" class="screen overlay hidden">
+                <h2 class="level-complete-text">STAGE CLEARED!</h2>
+                <p>GET READY FOR STAGE <span id="next-level">2</span></p>
+            </div>
+        </div>
+
+        <footer class="arcade-footer">
+            <div class="hud-info">
+                <div class="lives-container" id="lives-display">
+                    <!-- Lives icons populated by JS -->
+                </div>
+                <div class="level-container">
+                    STAGE: <span id="level-display">1</span>
+                </div>
+                <div class="fruit-container" id="fruit-display">
+                    <!-- Fruit icons populated by JS -->
+                </div>
+            </div>
+            <div class="controls-info">
+                <button id="sound-btn" class="control-toggle-btn" title="Toggle Sound">🔊 SOUND: ON</button>
+                <button id="crt-btn" class="control-toggle-btn" title="Toggle CRT Filter">📺 CRT: ON</button>
+            </div>
+        </footer>
+
+        <!-- Mobile Virtual D-Pad -->
+        <div class="virtual-pad" id="virtual-pad">
+            <div class="pad-row">
+                <button class="pad-btn" id="btn-up">▲</button>
+            </div>
+            <div class="pad-row">
+                <button class="pad-btn" id="btn-left">◀</button>
+                <button class="pad-btn" id="btn-center">●</button>
+                <button class="pad-btn" id="btn-right">▶</button>
+            </div>
+            <div class="pad-row">
+                <button class="pad-btn" id="btn-down">▼</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

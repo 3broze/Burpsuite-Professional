@@ -1,0 +1,315 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body {
+    background-color: #08080c;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+.arcade-container {
+    background: linear-gradient(135deg, #161622 0%, #0d0d14 100%);
+    border: 4px solid #ff007f;
+    border-radius: 16px;
+    box-shadow: 0 0 30px rgba(255, 0, 127, 0.4), inset 0 0 20px rgba(0, 243, 255, 0.2);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 520px;
+    width: 100%;
+}
+
+.arcade-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    border-bottom: 2px dashed #33334d;
+    padding-bottom: 10px;
+}
+
+.game-title {
+    font-size: 16px;
+    color: #ffb8ff;
+    text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff;
+    letter-spacing: 2px;
+}
+
+.highlight {
+    color: #00ffff;
+    text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
+}
+
+.score-board {
+    display: flex;
+    gap: 15px;
+}
+
+.score-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.score-box .label {
+    font-size: 8px;
+    color: #ff5555;
+    margin-bottom: 4px;
+}
+
+.score-box .value {
+    font-size: 11px;
+    color: #ffff55;
+    text-shadow: 0 0 6px rgba(255, 255, 85, 0.6);
+}
+
+.game-screen-wrapper {
+    position: relative;
+    background-color: #000;
+    border: 3px solid #00f3ff;
+    border-radius: 6px;
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
+    overflow: hidden;
+    width: 448px;
+    height: 496px;
+    max-width: 100%;
+}
+
+canvas {
+    display: block;
+    background-color: #000;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+/* CRT Scanline Effect */
+.crt.scanlines::before {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 10;
+    background-size: 100% 4px, 6px 100%;
+    pointer-events: none;
+}
+
+/* Overlays */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(8, 8, 12, 0.92);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+    text-align: center;
+    padding: 20px;
+    transition: opacity 0.3s ease;
+}
+
+.screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+    display: none;
+}
+
+.screen h2 {
+    font-size: 24px;
+    color: #ffff00;
+    text-shadow: 0 0 12px #ffff00, 0 0 24px #ff5500;
+    margin-bottom: 10px;
+    animation: pulse 1.5s infinite alternate;
+}
+
+.subtitle {
+    font-size: 10px;
+    color: #00ffff;
+    margin-bottom: 25px;
+    letter-spacing: 3px;
+}
+
+.instructions {
+    font-size: 8px;
+    color: #ccc;
+    line-height: 2;
+    margin-bottom: 30px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px dashed #444;
+}
+
+.key {
+    color: #ff007f;
+    background: rgba(255, 0, 127, 0.2);
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.arcade-btn {
+    font-family: 'Press Start 2P', monospace, sans-serif;
+    font-size: 11px;
+    background: linear-gradient(180deg, #ff007f 0%, #b30059 100%);
+    color: #fff;
+    border: 2px solid #ffb8ff;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(255, 0, 127, 0.6);
+    transition: all 0.2s ease;
+}
+
+.arcade-btn:hover {
+    background: linear-gradient(180deg, #ff3399. 0%, #cc0066 100%);
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(255, 0, 127, 0.9);
+}
+
+.arcade-btn:active {
+    transform: scale(0.98);
+}
+
+.game-over-text {
+    color: #ff3333 !important;
+    text-shadow: 0 0 15px #ff0000 !important;
+}
+
+.level-complete-text {
+    color: #00ff7f !important;
+    text-shadow: 0 0 15px #00ff00 !important;
+}
+
+.arcade-footer {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 2px dashed #33334d;
+    font-size: 9px;
+}
+
+.hud-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.lives-container {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.mini-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.level-container {
+    color: #00ffff;
+}
+
+.fruit-container {
+    display: flex;
+    gap: 4px;
+    min-height: 16px;
+    align-items: center;
+}
+
+.controls-info {
+    display: flex;
+    gap: 8px;
+}
+
+.control-toggle-btn {
+    font-family: 'Press Start 2P', monospace, sans-serif;
+    font-size: 7px;
+    background: #1f1f2e;
+    color: #b8b8ff;
+    border: 1px solid #444466;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.control-toggle-btn:hover {
+    background: #2e2e42;
+    color: #fff;
+    border-color: #00ffff;
+}
+
+/* Virtual D-Pad for Mobile */
+.virtual-pad {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 15px;
+    gap: 4px;
+}
+
+.pad-row {
+    display: flex;
+    gap: 20px;
+}
+
+.pad-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    width: 50px;
+    height: 45px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #00f3ff;
+    color: #00f3ff;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+}
+
+.pad-btn:active {
+    background: rgba(0, 243, 255, 0.3);
+    transform: scale(0.95);
+}
+
+@keyframes pulse {
+    0% { opacity: 0.8; transform: scale(1); }
+    100% { opacity: 1; transform: scale(1.03); }
+}
+
+@media (max-width: 480px) {
+    .arcade-container {
+        padding: 10px;
+        border: none;
+        box-shadow: none;
+    }
+    .game-screen-wrapper {
+        width: 100vw;
+        height: calc(100vw * 496 / 448);
+        max-height: 450px;
+    }
+    .virtual-pad {
+        display: flex;
+    }
+}
