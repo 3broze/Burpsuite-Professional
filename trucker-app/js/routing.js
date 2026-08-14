@@ -15,21 +15,49 @@
         return [{ label: lat.toFixed(5) + ', ' + lon.toFixed(5), lat: lat, lon: lon }];
       }
     }
-    const url = CONFIG.geocoder + '?format=jsonv2&limit=6&accept-language=en&q=' + encodeURIComponent(t);
-    const res = await fetch(url, { headers: { 'User-Agent': 'RouteRig-demo/1.0' } });
-    if (!res.ok) throw new Error('Geocoder error ' + res.status);
-    const json = await res.json();
-    return json.map(r => ({ label: r.display_name, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
+    /* NOTE: no custom headers — browsers treat User-Agent as a forbidden header,
+       and any custom header triggers a CORS preflight that OSM geocoders may reject. */
+    let lastErr = null;
+    for (const base of CONFIG.geocoders) {
+      try {
+        const res = await fetch(base + '?q=' + encodeURIComponent(t) + '&limit=6&accept-language=en' +
+          (base.includes('photon') ? '&lang=en' : '&format=jsonv2'));
+        if (res.status === 429) throw new Error('Geocoder is busy (HTTP 429)');
+        if (!res.ok) throw new Error('Geocoder HTTP ' + res.status);
+        const json = await res.json();
+        if (base.includes('photon')) {
+          const out = (json.features || []).map(f => {
+            const p = f.properties || {};
+            const c = f.geometry && f.geometry.coordinates;
+            if (!c) return null;
+            const label = [p.name, p.city || p.county || p.state, p.state, p.country]
+              .filter((v, i, arr) => v && arr.indexOf(v) === i).join(', ');
+            return { label: label, lat: c[1], lon: c[0] };
+          }).filter(Boolean);
+          if (out.length) return out;
+          throw new Error('No results');
+        } else {
+          const out = (json || []).map(r => ({ label: r.display_name, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
+          if (out.length) return out;
+          throw new Error('No results');
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error('Could not look up \"' + t + '\" — ' +
+      (lastErr && lastErr.message ? lastErr.message + '. ' : '') +
+      'Check your internet connection, or enter \"latitude, longitude\".');
   }
 
   /* ---------- route engines ---------- */
-  async function routeOSRM(o, d) {
-    const url = CONFIG.osrm + o.lng + ',' + o.lat + ';' + d.lng + ',' + d.lat +
+  async function routeOSRM(o, d, base) {
+    const url = (base || CONFIG.osrm) + o.lng + ',' + o.lat + ';' + d.lng + ',' + d.lat +
       '?overview=full&geometries=geojson&steps=false&alternatives=false';
     const res = await fetch(url);
-    if (!res.ok) throw new Error('OSRM routing error ' + res.status);
+    if (!res.ok) throw new Error('Routing server HTTP ' + res.status);
     const json = await res.json();
-    if (json.code !== 'Ok' || !json.routes || !json.routes.length) throw new Error('No route found');
+    if (json.code !== 'Ok' || !json.routes || !json.routes.length) throw new Error('Routing server found no route (' + (json.code || 'unknown') + ')');
     const r = json.routes[0];
     const coords = r.geometry.coordinates.map(c => [c[1], c[0]]);
     return { coords: coords, meters: r.distance, seconds: r.duration, engine: 'OSRM (car roads + on-board truck checks)' };
@@ -71,9 +99,17 @@
         RR.toast('HGV routing failed (' + e.message + ') — falling back to OSRM', 'warn');
       }
     }
-    const r = await routeOSRM(o, d);
-    if (r.meters == null) r.meters = geo.haversineM(o, d);
-    return r;
+    let lastErr = null;
+    for (const base of CONFIG.osrmServers) {
+      try {
+        const r = await routeOSRM(o, d, base);
+        if (r.meters == null) r.meters = geo.haversineM([o.lat, o.lng], [d.lat, d.lng]);
+        return r;
+      } catch (e) { lastErr = e; }
+    }
+    throw new Error('Routing failed on all servers — ' +
+      (lastErr && lastErr.message ? lastErr.message + '. ' : '') +
+      'Check your internet/firewall.');
   }
 
   /* ---------- clearance / restriction check along route ---------- */

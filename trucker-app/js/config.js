@@ -6,7 +6,15 @@
     defaultCenter: [32.985, -96.83], // Frisco / DFW area
     defaultZoom: 8,
     geocoder: 'https://nominatim.openstreetmap.org/search',
+    geocoders: [
+      'https://nominatim.openstreetmap.org/search',
+      'https://photon.komoot.io/api/'
+    ],
     osrm: 'https://router.project-osrm.org/route/v1/driving/',
+    osrmServers: [
+      'https://router.project-osrm.org/route/v1/driving/',
+      'https://routing.openstreetmap.de/routed-car/route/v1/driving/'
+    ],
     ors: {
       base: 'https://api.openrouteservice.org/v2/directions/driving-hgv',
       key: ''

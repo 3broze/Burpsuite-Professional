@@ -266,55 +266,79 @@
     const planId = ++state.planId;
     ui.showOverlay('Planning route…');
     try {
+      /* ---- step 1: find the places ---- */
+      ui.setStatus('Step 1/3: finding your origin & destination…');
       const origin = await resolveInput(originIn, 'origin');
       const dest = await resolveInput(destIn, 'dest');
       if (planId !== state.planId) return;
       state.originLL = origin;
       state.destLL = dest;
 
-      ui.setStatus('Routing ' + origin.label.split(',')[0] + ' → ' + dest.label.split(',')[0] + '…');
+      /* ---- step 2: compute the route ---- */
+      ui.setStatus('Step 2/3: routing ' + origin.label.split(',')[0] + ' → ' + dest.label.split(',')[0] + '…');
       const route = await routing.computeRoute(origin, dest, state.truck);
       if (planId !== state.planId) return;
       state.route = route;
       state.coords = route.coords;
       state.cum = geo.cumulative(route.coords);
       drawRoute();
-      ui.setStatus('Route ready — checking truck hazards, fuel & services…');
+      ui.setStatus('Route ready — step 3/3: checking truck hazards, fuel & services…');
 
-      const [clears, weighs, stations, shops] = await Promise.all([
-        routing.analyzeClearances(state.coords, state.truck, state.custom.clear),
-        routing.weighStationsAlong(state.coords, state.custom.weigh),
-        routing.fuelAlong(state.coords, state.custom.fuel),
-        routing.shopsAlong(state.coords, state.custom.shop)
-      ]);
+      /* ---- step 3: corridor data (non-fatal — route stands on its own) ---- */
+      const tasks = [
+        ['clearances', () => routing.analyzeClearances(state.coords, state.truck, state.custom.clear)],
+        ['weighs', () => routing.weighStationsAlong(state.coords, state.custom.weigh)],
+        ['fuel', () => routing.fuelAlong(state.coords, state.custom.fuel)],
+        ['shops', () => routing.shopsAlong(state.coords, state.custom.shop)]
+      ];
+      const settled = await Promise.allSettled(tasks.map(t => t[1]()));
       if (planId !== state.planId) return;
+      const got = {};
+      const failures = [];
+      settled.forEach((s, i) => {
+        const key = tasks[i][0];
+        if (s.status === 'fulfilled') got[key] = s.value;
+        else { got[key] = []; failures.push(key + ' (' + (s.reason && s.reason.message ? s.reason.message : 'unavailable') + ')'); }
+      });
 
-      state.clears = clears;
-      state.weighs = weighs;
-      state.stations = stations;
-      state.shops = shops;
-      addClearMarkers(clears);
-      addWeighMarkers(weighs);
-      addFuelMarkers(stations);
-      addShopMarkers(shops);
+      state.clears = got.clearances;
+      state.weighs = got.weighs;
+      state.stations = got.fuel;
+      state.shops = got.shops;
+      addClearMarkers(state.clears);
+      addWeighMarkers(state.weighs);
+      addFuelMarkers(state.stations);
+      addShopMarkers(state.shops);
 
       state.routeState = {
         coords: state.coords, cum: state.cum,
-        weighs: weighs, clears: clears, stations: stations, shops: shops,
+        weighs: state.weighs, clears: state.clears, stations: state.stations, shops: state.shops,
         truck: state.truck,
         meters: route.meters, seconds: route.seconds
       };
 
-      const plan = fuel.buildFuelPlan(route.meters, stations, state.truck);
+      const plan = state.stations.length
+        ? fuel.buildFuelPlan(route.meters, state.stations, state.truck)
+        : null;
       ui.renderRouteSummary(state);
       ui.renderFuelPlanCard(plan);
-      ui.renderFuelList(stations, 'Cheapest diesel along your route (' + stations.length + ' stops).');
-      ui.renderSvcList(shops, 'Best-rated repair along your route (' + shops.length + ' shops).');
+      ui.renderFuelList(state.stations,
+        state.stations.length
+          ? 'Cheapest diesel along your route (' + state.stations.length + ' stops).'
+          : 'Fuel data unavailable for this route right now — use "Near me" to retry.');
+      ui.renderSvcList(state.shops,
+        state.shops.length
+          ? 'Best-rated repair along your route (' + state.shops.length + ' shops).'
+          : 'Repair shop data unavailable right now — use "Near me" to retry.');
       $('#btn-clear-route').classList.remove('hidden');
 
-      const danger = clears.filter(c => c.severity === 'danger').length;
-      const nearDanger = clears.find(c => c.severity === 'danger' && c.distAlong < 2);
+      const danger = state.clears.filter(c => c.severity === 'danger').length;
+      const nearDanger = state.clears.find(c => c.severity === 'danger' && c.distAlong < 2);
       ui.hideOverlay();
+      if (failures.length) {
+        ui.toast('Route OK — some live data skipped', 'warn',
+          'Could not load: ' + failures.join('; ') + '. The route is shown; retry in a moment.');
+      }
       if (nearDanger) {
         RR.sink.alert({
           type: 'clear', severity: 'danger',
@@ -324,13 +348,16 @@
       } else if (danger) {
         ui.toast('⚠️ ' + danger + ' low clearance(s) on this route', 'warn', 'See map + Alerts tab. Check your truck height matches.');
       }
-      ui.setStatus('Route ' + util.fmtMi(route.meters / 1609.344) + ' · ' + weighs.length + ' weigh stations · ' + danger + ' clearance hazards · ready to drive');
+      ui.setStatus('Route ' + util.fmtMi(route.meters / 1609.344) + ' · ' + state.weighs.length + ' weigh stations · ' + danger + ' clearance hazards · ready to drive');
       ui.toast('Route planned', 'success', util.fmtMi(route.meters / 1609.344) + ' · hit DEMO DRIVE or GPS to start');
     } catch (e) {
       if (planId !== state.planId) return;
       ui.hideOverlay();
-      ui.toast('Route planning failed', 'danger', e && e.message ? e.message : 'Unknown error');
-      ui.setStatus('Route planning failed — ' + (e && e.message ? e.message : ''));
+      const msg = e && e.message ? e.message : 'Unknown error';
+      ui.toast('Route planning failed', 'danger', msg);
+      ui.setStatus('Route planning failed — ' + msg);
+      /* eslint-disable-next-line no-console */
+      console.error('[RouteRig] route planning error:', e);
     }
   }
 
@@ -638,6 +665,27 @@
     });
   }
 
+  /* ---------- connectivity self-test (informational) ---------- */
+  async function diagConnections() {
+    const checks = [
+      ['routing', 'https://router.project-osrm.org/route/v1/driving/0,0;0.001,0?overview=false'],
+      ['address lookup', 'https://nominatim.openstreetmap.org/search?format=jsonv2&q=x&limit=1'],
+      ['POI data', 'https://overpass-api.de/api/status']
+    ];
+    const results = await Promise.allSettled(checks.map(([, url]) => fetch(url, { mode: 'cors' })));
+    const failed = [];
+    results.forEach((r, i) => {
+      const ok = r.status === 'fulfilled' && r.value.ok;
+      if (!ok) failed.push(checks[i][0]);
+    });
+    if (failed.length === checks.length) {
+      ui.toast('Live data unreachable', 'warn', 'Routing, address lookup and POI data are all blocked — check your internet connection or firewall. You can still explore the map.');
+      ui.setStatus('Live data APIs unreachable — check your internet connection.');
+    } else if (failed.length) {
+      ui.setStatus('Note: ' + failed.join(', ') + ' may be unreachable — some features will fall back.');
+    }
+  }
+
   /* ---------- boot ---------- */
   function boot() {
     if (RR.state._booted) return;
@@ -658,6 +706,7 @@
     routing.shopsAround(c.lat, c.lng, 30000, state.custom.shop)
       .then(shops => { addShopMarkers(shops); ui.renderSvcList(shops, 'Best-rated repair near DFW (' + shops.length + ' shops).'); })
       .catch(() => {});
+    diagConnections();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });

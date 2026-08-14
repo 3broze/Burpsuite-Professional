@@ -35,6 +35,12 @@ then open <http://localhost:8000>. No build step, no backend — everything runs
 
 **Keyboard:** `G` GPS · `D` demo drive · `Space` pause/resume demo drive.
 
+## Troubleshooting
+
+- **"Route planning failed"** — the status bar names the failing step (lookup / routing / live data) and the toast shows the exact API error. RouteRig retries geocoding on two providers (Nominatim + Photon) and routing on two OSRM servers. If everything fails, the boot self-test shows "Live data unreachable" — the app needs internet for tiles + OSM APIs; check your firewall/VPN.
+- **Route shows but no fuel/weigh/clearance pins** — the Overpass API was busy; the route still stands and a warning toast says which dataset was skipped. Retry in a minute.
+- **Want true truck routing?** Add a free OpenRouteService key in the Rig tab; without it, routing uses OSRM plus this app's own clearance/weight corridor checks.
+
 ## Data sources & honesty notes
 
 - **Live data:** OpenStreetMap via the Overpass API (fuel stops, shops, weighbridges, clearance tags), Nominatim geocoding, OSRM routing, CARTO/OSM map tiles.
