@@ -1,5 +1,6 @@
-/* RouteRig service worker: app shell offline + network-first for live data */
-const CACHE = 'routerig-v4';
+/* RouteRig service worker: NETWORK-FIRST so fixes always reach the cab,
+   cache only as offline fallback. Bump CACHE version when assets change. */
+const CACHE = 'routerig-v6';
 const ASSETS = [
   './',
   'index.html',
@@ -44,7 +45,9 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -55,21 +58,27 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) {
-    return; // live data (tiles/APIs): let the network handle it
+    return; // live data (tiles/APIs): straight to the network
   }
-  /* app shell: cache-first with background refresh */
+  /* network-first: always fresh code when online; cached shell when offline */
   e.respondWith(
-    caches.match(e.request).then((hit) => {
-      const refresh = fetch(e.request)
-        .then((res) => {
-          if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone()));
-          return res;
-        })
-        .catch(() => hit);
-      return hit || refresh;
-    })
+    fetch(e.request)
+      .then((res) => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, clone));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(e.request).then((hit) => hit || caches.match('./'))
+      )
   );
 });

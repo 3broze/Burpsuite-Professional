@@ -897,6 +897,9 @@
     if (RR.state._booted) return;
     RR.state._booted = true;
     state.navEngine = new RR.nav.NavEngine();
+    const tag = $('#build-tag');
+    if (tag) tag.textContent = 'build ' + CONFIG.buildStamp;
+    console.log('[RouteRig] build', CONFIG.buildStamp);
     initMap();
     wireUI();
     ui.setStatus('Ready. Plan a route, or hit GPS / DEMO DRIVE. Prices & weigh-station status are simulated.');

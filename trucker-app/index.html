@@ -226,6 +226,8 @@
   <div id="statusbar">
     <span id="status-msg">Ready. Plan a route, or hit GPS / DEMO DRIVE.</span>
     <span class="status-right">
+      <span id="build-tag"></span>
+      <span class="pipe">|</span>
       <span id="sim-clock" class="hidden">🕐 SIM <span id="sim-clock-t"></span></span>
       <span class="pipe">|</span> Prices simulated
     </span>
@@ -272,7 +274,15 @@
 <script>
 /* PWA: service worker + install prompt */
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-  navigator.serviceWorker.register('sw.js').catch(function () {});
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+    /* auto-upgrade: when a newer service worker takes over, reload once so
+       the fresh code is actually shown */
+    var reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!reloaded) { reloaded = true; window.location.reload(); }
+    });
+    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  }).catch(function () {});
 }
 window.addEventListener('beforeinstallprompt', function (e) {
   e.preventDefault();

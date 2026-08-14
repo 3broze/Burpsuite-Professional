@@ -92,26 +92,6 @@
     return { coords: coords, meters: s.distance || null, seconds: s.duration || null, engine: 'OpenRouteService HGV (truck routing)' };
   }
 
-  async function computeRoute(o, d, truck) {
-    if (CONFIG.ors.key) {
-      try { return await routeORS(o, d, truck); }
-      catch (e) {
-        RR.toast('HGV routing failed (' + e.message + ') — falling back to OSRM', 'warn');
-      }
-    }
-    let lastErr = null;
-    for (const base of CONFIG.osrmServers) {
-      try {
-        const r = await routeOSRM(o, d, base);
-        if (r.meters == null) r.meters = geo.haversineM([o.lat, o.lng], [d.lat, d.lng]);
-        return r;
-      } catch (e) { lastErr = e; }
-    }
-    throw new Error('Routing failed on all servers — ' +
-      (lastErr && lastErr.message ? lastErr.message + '. ' : '') +
-      'Check your internet/firewall.');
-  }
-
   /* ---------- multiple route options ---------- */
   async function routeOSRMMulti(o, d, base) {
     const url = (base || CONFIG.osrm) + o.lng + ',' + o.lat + ';' + d.lng + ',' + d.lat +
