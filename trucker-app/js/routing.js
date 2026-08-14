@@ -115,7 +115,7 @@
   /* ---------- multiple route options ---------- */
   async function routeOSRMMulti(o, d, base) {
     const url = (base || CONFIG.osrm) + o.lng + ',' + o.lat + ';' + d.lng + ',' + d.lat +
-      '?overview=full&geometries=geojson&steps=false&alternatives=true';
+      '?overview=full&geometries=geojson&steps=true&alternatives=true';
     const res = await fetch(url);
     if (!res.ok) throw new Error('Routing server HTTP ' + res.status);
     const json = await res.json();
@@ -123,8 +123,33 @@
     return json.routes.map(r => ({
       coords: r.geometry.coordinates.map(c => [c[1], c[0]]),
       meters: r.distance, seconds: r.duration,
-      engine: 'OSRM (car roads + on-board truck checks)'
+      engine: 'OSRM (car roads + on-board truck checks)',
+      steps: parseSteps(r)
     }));
+  }
+
+  /* OSRM legs[0].steps -> normalized maneuver list with cumulative meters */
+  function parseSteps(r) {
+    const leg = (r.legs && r.legs[0]) || {};
+    let cum = 0;
+    return (leg.steps || []).map(s => {
+      const m = s.maneuver || {};
+      const loc = m.location ? [m.location[1], m.location[0]] : null;
+      const step = {
+        text: RR.nav ? RR.nav.maneuverText(m.type, m.modifier, s.name, s.ref, s.exits, s.destinations) : '',
+        distM: s.distance || 0,
+        durS: s.duration || 0,
+        lat: loc ? loc[0] : null,
+        lng: loc ? loc[1] : null,
+        type: m.type || 'continue',
+        modifier: m.modifier || '',
+        name: s.name || '',
+        ref: s.ref || ''
+      };
+      step.cumM = cum;
+      cum += step.distM;
+      return step;
+    });
   }
 
   /* last-resort straight-line route so planning never fails when routing APIs are blocked */
@@ -136,11 +161,13 @@
       const t = i / (n - 1);
       coords.push([o.lat + (d.lat - o.lat) * t, o.lng + (d.lng - o.lng) * t]);
     }
-    return {
+    const route = {
       id: 'fallback', label: 'Direct line (offline)',
       coords: coords, meters: distM * 1.08, seconds: distM * 1.08 / 10.5,
       engine: 'Fallback — direct line (live routing blocked)'
     };
+    route.steps = RR.nav ? RR.nav.synthSteps(route.coords) : [];
+    return route;
   }
 
   async function computeRouteOptions(o, d, truck) {
@@ -150,6 +177,7 @@
         const r = await routeORS(o, d, truck);
         r.id = 'hgv';
         r.label = 'Truck-safe (HGV)';
+        r.steps = RR.nav ? RR.nav.synthSteps(r.coords) : [];
         out.push(r);
       } catch (e) {
         RR.toast('HGV routing failed (' + e.message + ') — using standard options', 'warn');
@@ -168,6 +196,9 @@
         }
       } catch (e) { /* try next server */ }
       if (out.length >= 4 || (out.length >= 2 && !CONFIG.ors.key)) break;
+    }
+    for (const r of out) {
+      if (!r.steps || !r.steps.length) r.steps = RR.nav ? RR.nav.synthSteps(r.coords) : [];
     }
     if (!out.length) out.push(straightLineRoute(o, d));
 
@@ -470,7 +501,7 @@
   }
 
   const routing = {
-    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute,
+    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute, parseSteps,
     analyzeClearances, clearancesAround,
     weighStationsAlong, weighAround, weighStationsAlongLocal,
     fuelAlong, fuelAround, fuelAlongLocal,

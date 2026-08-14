@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RouteRig — Trucker GPS · Fuel · Alerts</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚛</text></svg>">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RouteRig">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
 <link rel="stylesheet" href="css/fonts.css">
@@ -27,6 +34,8 @@
       </div>
     </div>
     <div class="topbar-actions">
+      <button id="btn-install" class="btn btn-ghost hidden" title="Install RouteRig on this device">📲 Install</button>
+      <button id="btn-mic" class="icon-btn hidden" title="Voice commands (Chrome/Edge)">🎤</button>
       <button id="btn-locate" class="btn btn-ghost" title="Use real GPS position">
         <span class="dot dot-green"></span> GPS
       </button>
@@ -39,6 +48,7 @@
   <aside id="sidebar">
     <div id="tabs">
       <button class="tab active" data-tab="route">🛣️ Route</button>
+      <button class="tab" data-tab="nav">🧭 Turn-by-Turn</button>
       <button class="tab" data-tab="fuel">⛽ Fuel</button>
       <button class="tab" data-tab="service">🔧 Service</button>
       <button class="tab" data-tab="alerts">🚨 Alerts</button>
@@ -76,6 +86,27 @@
         <div id="fuel-plan-card" class="card hidden"></div>
         <button id="btn-clear-route" class="btn btn-ghost btn-block hidden">✕ Clear route</button>
         <div class="footnote">Live data: OpenStreetMap · Overpass · OSRM. Fuel prices &amp; weigh-station status are <b>simulated</b> — verify before dispatch.</div>
+      </section>
+
+      <!-- TURN-BY-TURN -->
+      <section class="panel" id="panel-nav">
+        <div class="btn-row">
+          <button id="btn-voice-toggle" class="btn btn-ghost">🔊 Voice: ON</button>
+          <button id="btn-read-route" class="btn btn-ghost">📖 Read route</button>
+        </div>
+        <label class="checkbox-row"><input id="voice-alerts" type="checkbox" checked> Speak alerts (weigh stations, low clearance, fuel)</label>
+        <div class="subhead" id="nav-subhead">Plan a route to get turn-by-turn directions.</div>
+        <div id="nav-card" class="card hidden">
+          <div class="nav-now">
+            <div id="nav-arrow" class="nav-arrow">🟢</div>
+            <div class="nav-now-text">
+              <div id="nav-instruction" class="nav-instr">—</div>
+              <div id="nav-distance" class="nav-dist">—</div>
+            </div>
+          </div>
+          <div id="nav-road" class="nav-road"></div>
+        </div>
+        <div id="nav-list" class="poi-list"></div>
       </section>
 
       <!-- FUEL -->
@@ -166,6 +197,7 @@
     <div class="hud-speed"><span id="hud-speed">0</span><em>mph</em></div>
     <div class="hud-mid">
       <div class="hud-row"><span class="hud-label">Heading</span><span id="hud-heading">—</span></div>
+      <div class="hud-row"><span class="hud-label">Next turn</span><span id="hud-turn">—</span></div>
       <div class="hud-row"><span class="hud-label">Next alert</span><span id="hud-next">—</span></div>
       <div class="hud-row"><span class="hud-label">To destination</span><span id="hud-eta">—</span></div>
     </div>
@@ -226,6 +258,7 @@
 <script src="js/config.js"></script>
 <script src="js/util.js"></script>
 <script src="js/geo.js"></script>
+<script src="js/nav.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/data.js"></script>
 <script src="js/overpass.js"></script>
@@ -234,6 +267,30 @@
 <script src="js/routing.js"></script>
 <script src="js/drive.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/voice.js"></script>
 <script src="js/app.js"></script>
+<script>
+/* PWA: service worker + install prompt */
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  window.__installPrompt = e;
+  var b = document.getElementById('btn-install');
+  if (b) b.classList.remove('hidden');
+});
+document.addEventListener('DOMContentLoaded', function () {
+  var b = document.getElementById('btn-install');
+  if (b) b.addEventListener('click', function () {
+    if (window.__installPrompt) {
+      window.__installPrompt.prompt();
+      window.__installPrompt.userChoice.then(function () { b.classList.add('hidden'); });
+    } else {
+      alert('Install from your browser menu: "Add to Home Screen" / "Install app".');
+    }
+  });
+});
+</script>
 </body>
 </html>

@@ -64,16 +64,23 @@ html = html.replace('<link rel="stylesheet" href="css/style.css">',
 js_files = [
     'vendor/leaflet/leaflet.js',
     'vendor/markercluster/leaflet.markercluster.js',
-    'js/config.js', 'js/util.js', 'js/geo.js', 'js/icons.js', 'js/data.js',
+    'js/config.js', 'js/util.js', 'js/geo.js', 'js/nav.js', 'js/icons.js', 'js/data.js',
     'js/overpass.js', 'js/fuel.js', 'js/services.js', 'js/routing.js',
-    'js/drive.js', 'js/ui.js', 'js/app.js',
+    'js/drive.js', 'js/ui.js', 'js/voice.js', 'js/app.js',
 ]
 for rel in js_files:
     with open(os.path.join(APP, rel), 'r', encoding='utf-8') as f:
         code = f.read()
     html = html.replace(f'<script src="{rel}"></script>', '<script>\n' + code + '\n</script>')
 
-# --- favicon stays as-is (inline data URI already) ---
+# --- inline apple-touch-icon; drop the manifest link (PWA needs a served origin) ---
+apple = data_uri(os.path.join(APP, 'icons/apple-touch-icon.png'), 'image/png')
+html = html.replace('<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">',
+                    '<link rel="apple-touch-icon" href="' + apple + '">')
+html = html.replace('<link rel="manifest" href="manifest.json">', '')
+html = html.replace('<link rel="icon" href="data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'><text y=\'.9em\' font-size=\'90\'>🚛</text></svg>">',
+                    '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E🚛%3C/text%3E%3C/svg%3E">')
+
 # --- ensure Leaflet default icon path never hits the network (we only use divIcons) ---
 html = html.replace('</body>',
     "<script>try{window.L&&L.Icon&&(L.Icon.Default.imagePath='data:');}catch(e){}</script>\n</body>")

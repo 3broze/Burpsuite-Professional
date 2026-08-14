@@ -21,6 +21,7 @@
     simEngine: null,
     gpsEngine: new drive.AlertEngine(),
     truckMarker: null, gpsMarker: null,
+    navEngine: null,
     planId: 0,
     originLL: null, destLL: null,
     lastGpsCtx: 0
@@ -163,6 +164,106 @@
     planRoute();
   };
 
+  RR.hooks.focusStep = function (i) {
+    const steps = state.route && state.route.steps;
+    if (!steps || !steps[i]) return;
+    const s = steps[i];
+    if (s.lat != null && s.lng != null) {
+      state.map.flyTo([s.lat, s.lng], Math.max(state.map.getZoom(), 14), { duration: 0.7 });
+    } else {
+      const pos = geo.pointAtAlong(state.coords, state.cum, s.cumM || 0);
+      state.map.flyTo(pos, Math.max(state.map.getZoom(), 14), { duration: 0.7 });
+    }
+  };
+
+  RR.hooks.voiceState = function (listening) {
+    const mic = $('#btn-mic');
+    if (mic) mic.classList.toggle('listening', !!listening);
+  };
+
+  /* voice commands (like Google Maps "OK Google" style) */
+  RR.hooks.voiceCommand = function (t) {
+    const sim = state.sim;
+    let m;
+    if ((m = t.match(/^(navigate|take me|directions|drive)( me)?( to)? (.+)$/)) ||
+        (m = t.match(/^route to (.+)$/))) {
+      const dest = (m[4] || m[1] || '').trim();
+      if (!dest) { ui.toast('Say: navigate to Dallas', 'info'); return; }
+      const inDest = $('#in-dest');
+      inDest.value = dest;
+      delete inDest.dataset.lat;
+      delete inDest.dataset.lng;
+      switchTab('route');
+      ui.toast('Navigating to "' + dest + '"', 'success');
+      RR.voice.speak('Navigating to ' + dest);
+      planRoute();
+    } else if (/^(demo|demo drive|start (the )?demo|start driving)/.test(t)) {
+      if (!state.routeState) {
+        ui.toast('Plan a route first', 'warn', 'Say "navigate to Dallas" or use a preset.');
+        switchTab('route');
+        return;
+      }
+      $('#btn-demo').click();
+    } else if (/^(stop|stop driving|stop demo|end)/.test(t)) {
+      if (sim && sim.running) sim.stop(false);
+      else if (drive.gps.active) drive.gps.stop();
+      else RR.voice.speak('Nothing is running.');
+    } else if (/^(mute|voice off|silence)/.test(t)) {
+      setVoiceEnabled(false);
+    } else if (/^(voice on|unmute|sound on)/.test(t)) {
+      setVoiceEnabled(true);
+    } else if (/^(zoom in)/.test(t)) {
+      state.map.zoomIn();
+    } else if (/^(zoom out)/.test(t)) {
+      state.map.zoomOut();
+    } else if (/fuel|cheap diesel|truck stop/.test(t)) {
+      switchTab('fuel');
+      $('#btn-fuel-near-me').click();
+    } else if (/where am i|my location/.test(t)) {
+      drive.gps.start();
+    } else if (/repair|mechanic|service shop/.test(t)) {
+      switchTab('service');
+      $('#btn-svc-near-me').click();
+    } else if (/read route|route details|directions/.test(t)) {
+      switchTab('nav');
+      readRouteAloud();
+    } else {
+      ui.toast('Command not recognized', 'info', 'Try: "navigate to Dallas" · "demo drive" · "stop" · "mute" · "fuel"');
+    }
+  };
+
+  function setVoiceEnabled(on) {
+    RR.voice.enabled = on;
+    RR.settings.voiceOn = on;
+    ui.saveSettings(RR.settings);
+    const btn = $('#btn-voice-toggle');
+    if (btn) btn.textContent = on ? '🔊 Voice: ON' : '🔇 Voice: OFF';
+    if (!on) RR.voice.stop();
+    ui.toast(on ? 'Voice guidance on' : 'Voice guidance off', 'info');
+  }
+
+  /* read the route aloud: summary + maneuvers */
+  function readRouteAloud() {
+    const opt = state.route;
+    if (!opt) { ui.toast('Plan a route first', 'warn'); return; }
+    const steps = opt.steps || [];
+    const parts = [];
+    parts.push('Route ready. ' + util.fmtMi(opt.meters / 1609.344) + ', about ' + util.fmtClock(opt.seconds || 0) + '.');
+    const maxRead = Math.min(steps.length, 12);
+    for (let i = 1; i < maxRead; i++) {
+      parts.push('Then, ' + RR.nav.lowerFirst(steps[i].text) + (steps[i].distM > 50 ? ', in ' + util.fmtMi(steps[i].distM / 1609.344) : ''));
+    }
+    if (steps.length > maxRead) parts.push('And ' + (steps.length - maxRead) + ' more turns. See the list for details.');
+    RR.voice.speak(parts.join(' '));
+  }
+
+  /* nav tick from drive/GPS */
+  RR.sink.onNavTick = function (o) {
+    if (!state.navEngine || !state.navEngine.opt) return;
+    const info = state.navEngine.tick(o.alongM, o.speedMph || 0);
+    if (info) RR.sink.onNavInfo(info);
+  };
+
   RR.hooks.removeCustom = function (id, type) {
     state.custom[type] = (state.custom[type] || []).filter(p => p.id !== id);
     persistCustom();
@@ -223,6 +324,7 @@
     if (state.routeState) {
       const proj = geo.projectOnLine([g.pos.lat, g.pos.lng], state.coords, state.cum);
       if (proj && proj.crossM < 300) {
+        RR.sink.onNavTick({ alongM: proj.alongM, speedMph: g.speedMph || 0 });
         const alongMi = proj.alongM / 1609.344;
         const fuelGal = state.truck.tankGal * 0.95 - alongMi / state.truck.mpg;
         alerts = state.gpsEngine.checkRoute({ alongMi: alongMi, fuelGal: Math.max(0, fuelGal), simDate: new Date(), rs: state.routeState });
@@ -373,6 +475,12 @@
       meters: opt.meters, seconds: opt.seconds
     };
 
+    /* turn-by-turn */
+    state.navEngine.setRoute(opt, opt.steps || []);
+    ui.renderDirections(opt.steps || [], (opt.meters || 0) / 1609.344, -1);
+    const firstInfo = state.navEngine.tick(0, 0);
+    if (firstInfo) RR.sink.onNavInfo(firstInfo);
+
     const plan = state.stations.length
       ? fuel.buildFuelPlan(opt.meters, state.stations, state.truck)
       : null;
@@ -466,6 +574,9 @@
     $('#route-options').classList.add('hidden');
     state.routeOptions = [];
     state.liveData = null;
+    if (state.navEngine) state.navEngine.reset();
+    ui.renderDirections([], 0, -1);
+    $('#nav-card').classList.add('hidden');
     ui.renderFuelList([], 'Plan a route to find cheap diesel along the way.');
     ui.renderSvcList([], 'Plan a route to find repair shops along the way.');
     ui.setStatus('Route cleared.');
@@ -598,8 +709,10 @@
     $('#hud-slower').addEventListener('click', () => { if (state.sim) state.sim.bumpSpeed(-5); });
     $('#hud-stop').addEventListener('click', () => { if (state.sim) state.sim.stop(false); });
     RR.hooks.driveStopOrig = RR.hooks.driveStop;
+    RR.hooks.driveStopOrig2 = RR.hooks.driveStop;
     RR.hooks.driveStop = function (completed) {
       $('#btn-demo').innerHTML = '▶ DEMO DRIVE';
+      if (!completed && RR.voice) RR.voice.stop();
       if (RR.hooks.driveStopOrig) RR.hooks.driveStopOrig(completed);
     };
 
@@ -724,6 +837,25 @@
       else refreshNearLayers();
     });
 
+    /* ---- voice & turn-by-turn controls ---- */
+    RR.voice.init();
+    if (RR.voice.rec) $('#btn-mic').classList.remove('hidden');
+    RR.voice.enabled = !!RR.settings.voiceOn;
+    RR.voice.alertsEnabled = !!RR.settings.voiceAlerts;
+    $('#btn-voice-toggle').textContent = RR.voice.enabled ? '🔊 Voice: ON' : '🔇 Voice: OFF';
+    $('#voice-alerts').checked = RR.voice.alertsEnabled;
+    $('#btn-mic').addEventListener('click', () => RR.voice.toggleListen());
+    $('#btn-voice-toggle').addEventListener('click', () => setVoiceEnabled(!RR.voice.enabled));
+    $('#voice-alerts').addEventListener('change', (e) => {
+      RR.voice.alertsEnabled = e.target.checked;
+      RR.settings.voiceAlerts = e.target.checked;
+      ui.saveSettings(RR.settings);
+    });
+    $('#btn-read-route').addEventListener('click', () => {
+      if (!state.route) { ui.toast('Plan a route first', 'warn'); return; }
+      readRouteAloud();
+    });
+
     /* keyboard shortcuts */
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -764,6 +896,7 @@
   function boot() {
     if (RR.state._booted) return;
     RR.state._booted = true;
+    state.navEngine = new RR.nav.NavEngine();
     initMap();
     wireUI();
     ui.setStatus('Ready. Plan a route, or hit GPS / DEMO DRIVE. Prices & weigh-station status are simulated.');

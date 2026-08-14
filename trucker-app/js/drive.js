@@ -194,6 +194,8 @@
         simDate: this.simNow,
         paused: this.paused
       });
+      /* turn-by-turn voice announcements */
+      if (RR.sink.onNavTick) RR.sink.onNavTick({ alongM: this.alongM, speedMph: this.paused ? 0 : this.speedMph });
       RR.sink.onHud({
         mode: 'sim',
         speedMph: this.paused ? 0 : this.speedMph,

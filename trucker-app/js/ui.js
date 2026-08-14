@@ -173,6 +173,48 @@
     }).join('');
   }
 
+  /* ---------- turn-by-turn directions ---------- */
+  function renderDirections(steps, totalMi, activeIdx) {
+    const list = $('#nav-list');
+    const sub = $('#nav-subhead');
+    if (!steps || !steps.length) {
+      sub.textContent = 'Plan a route to get turn-by-turn directions.';
+      list.innerHTML = '<div class="empty-note">Turn-by-turn directions appear here after you plan a route.<br>Voice speaks each turn during the drive (demo or GPS).</div>';
+      return;
+    }
+    sub.textContent = steps.length + ' maneuvers · ' + (totalMi != null ? util.fmtMi(totalMi) : '') + ' · voice guidance ready';
+    list.innerHTML = steps.map((s, i) =>
+      '<div class="dir-row' + (i === activeIdx ? ' active' : '') + '" data-i="' + i + '" onclick="RR.hooks.focusStep(' + i + ')">' +
+      '<div class="dir-arrow">' + RR.nav.arrowFor(s) + '</div>' +
+      '<div class="dir-text">' + util.esc(s.text) +
+      '<small>' + (i > 0 ? 'after ' + util.fmtMi(((s.cumM - steps[i - 1].cumM) || steps[i - 1].distM || 0) / 1609.344) + ' · ' : '') +
+      'at mile ' + util.fmtMi(s.cumM / 1609.344) + '</small></div>' +
+      '<div class="dir-cum">' + util.fmtMi(s.cumM / 1609.344) + '</div></div>'
+    ).join('');
+  }
+
+  function navInfo(info) {
+    if (!info) return;
+    const card = $('#nav-card');
+    card.classList.remove('hidden');
+    $('#nav-arrow').textContent = info.arrow || '↑';
+    $('#nav-instruction').textContent = info.instruction || '—';
+    $('#nav-distance').textContent = info.distM != null
+      ? (info.distM <= 60 ? 'Now' : 'In ' + util.fmtDistMeters(info.distM))
+      : '—';
+    $('#nav-road').textContent = info.road ? 'Road: ' + info.road : '';
+    /* HUD row */
+    const t = info.arrow + ' ' + String(info.instruction || '—');
+    $('#hud-turn').textContent = t.length > 34 ? t.slice(0, 32) + '…' : t;
+    /* highlight list row */
+    const rows = document.querySelectorAll('#nav-list .dir-row');
+    rows.forEach((r, i) => r.classList.toggle('active', i === info.idx));
+    const active = document.querySelector('#nav-list .dir-row.active');
+    if (active && active.scrollIntoView) {
+      try { active.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* noop */ }
+    }
+  }
+
   function renderRouteSummary(state) {
     const el = $('#route-summary');
     if (!state || !state.route) { el.classList.add('hidden'); return; }
@@ -297,6 +339,8 @@
     truck.heightM = (truck.heightFt + truck.heightIn / 12) * 0.3048;
     const al = Object.assign({}, CONFIG.alertDistDefaults, util.store.get('alertDist', {}));
     const orsKey = util.store.get('orsKey', '');
+    const voiceOn = util.store.get('voiceOn', true);
+    const voiceAlerts = util.store.get('voiceAlerts', true);
     let theme = util.store.get('theme', 'light');
     /* one-time migration: the old default was dark — move to readable streets */
     if (!util.store.get('themeMigrated', false)) {
@@ -305,7 +349,7 @@
       util.store.set('theme', theme);
     }
     CONFIG.ors.key = orsKey || '';
-    return { truck: truck, alertWeighMi: al.weighMi, alertClearMi: al.clearMi, orsKey: orsKey, theme: theme };
+    return { truck: truck, alertWeighMi: al.weighMi, alertClearMi: al.clearMi, orsKey: orsKey, theme: theme, voiceOn: voiceOn, voiceAlerts: voiceAlerts };
   }
   function saveSettings(s) {
     util.store.set('truck', {
@@ -316,6 +360,8 @@
     util.store.set('alertDist', { weighMi: s.alertWeighMi, clearMi: s.alertClearMi });
     util.store.set('orsKey', s.orsKey);
     util.store.set('theme', s.theme);
+    util.store.set('voiceOn', !!s.voiceOn);
+    util.store.set('voiceAlerts', !!s.voiceAlerts);
     CONFIG.ors.key = s.orsKey || '';
   }
 
@@ -342,7 +388,11 @@
       addFeed(a);
       toast(a.title, a.severity, a.detail);
       audio.beep(a.type);
+      if (RR.voice) RR.voice.speakAlert(a.title);
       if (RR.hooks.alert) RR.hooks.alert(a);
+    },
+    onNavInfo(info) {
+      navInfo(info);
     },
     onGpsStart() {
       if (RR.hooks.gpsStart) RR.hooks.gpsStart();
@@ -372,7 +422,7 @@
 
   const ui = {
     showOverlay, hideOverlay, setStatus, toast, addFeed, audio,
-    renderFuelList, renderSvcList, renderRouteSummary, renderFuelPlanCard,
+    renderFuelList, renderSvcList, renderRouteSummary, renderFuelPlanCard, renderDirections, navInfo,
     bindSearch, hudVisible, hudUpdate, simClock, loadSettings, saveSettings,
     popups: { fuel: fuelPopup, weigh: weighPopup, clear: clearPopup, shop: shopPopup }
   };
