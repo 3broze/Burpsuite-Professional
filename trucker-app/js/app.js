@@ -385,10 +385,24 @@
 
   async function planRoute() {
     const originIn = $('#in-origin'), destIn = $('#in-dest');
-    if (!originIn.value.trim() || !destIn.value.trim()) {
-      ui.toast('Enter origin and destination', 'warn');
+    if (!destIn.value.trim()) {
+      ui.toast('Enter a destination', 'warn');
       switchTab('route');
       return;
+    }
+    /* Origin left blank? Use live GPS / sim truck position automatically. */
+    if (!originIn.value.trim()) {
+      const pos = drive.gps.pos || (state.truckMarker ? state.truckMarker.getLatLng() : null);
+      if (pos) {
+        originIn.value = drive.gps.pos ? 'My current GPS position' : 'Current truck position';
+        originIn.dataset.lat = pos.lat;
+        originIn.dataset.lng = pos.lng;
+      } else {
+        ui.toast('Where are you starting from?', 'warn',
+          'Type a city, click 📍 to use GPS, or 🗺 to use the map center.');
+        switchTab('route');
+        return;
+      }
     }
     const planId = ++state.planId;
     ui.showOverlay('Planning route…');
