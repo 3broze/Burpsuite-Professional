@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RouteRig — Trucker GPS · Fuel · Alerts</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚛</text></svg>">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ MAP ============ -->
+  <div id="map"></div>
+
+  <!-- ============ TOP BAR ============ -->
+  <header id="topbar">
+    <button id="btn-menu" class="icon-btn" title="Menu"><span>☰</span></button>
+    <div class="brand">
+      <div class="brand-logo">🚛</div>
+      <div class="brand-text">
+        <h1>ROUTERIG</h1>
+        <span>Trucker GPS · Fuel · Alerts</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-locate" class="btn btn-ghost" title="Use real GPS position">
+        <span class="dot dot-green"></span> GPS
+      </button>
+      <button id="btn-demo" class="btn btn-primary" title="Simulate driving your route">▶ DEMO DRIVE</button>
+      <button id="btn-theme" class="icon-btn" title="Toggle dark/light map">🌗</button>
+    </div>
+  </header>
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside id="sidebar">
+    <div id="tabs">
+      <button class="tab active" data-tab="route">🛣️ Route</button>
+      <button class="tab" data-tab="fuel">⛽ Fuel</button>
+      <button class="tab" data-tab="service">🔧 Service</button>
+      <button class="tab" data-tab="alerts">🚨 Alerts</button>
+      <button class="tab" data-tab="truck">🚚 Rig</button>
+    </div>
+    <div id="panels">
+
+      <!-- ROUTE -->
+      <section class="panel active" id="panel-route">
+        <label class="field-label">From</label>
+        <div class="search-wrap">
+          <input id="in-origin" type="text" placeholder="City, truck stop, or address…" autocomplete="off">
+          <button class="mini-btn" id="btn-origin-gps" title="Use my GPS position">📍</button>
+          <div class="search-results" id="res-origin"></div>
+        </div>
+        <label class="field-label">To</label>
+        <div class="search-wrap">
+          <input id="in-dest" type="text" placeholder="Destination…" autocomplete="off">
+          <div class="search-results" id="res-dest"></div>
+        </div>
+        <div class="btn-row">
+          <button id="btn-route" class="btn btn-primary btn-block">PLAN ROUTE</button>
+        </div>
+        <div class="presets">
+          <span class="preset-label">Demo hauls:</span>
+          <button class="chip" data-preset="frisco-okc">Frisco TX → Oklahoma City</button>
+          <button class="chip" data-preset="dallas-houston">Dallas → Houston</button>
+          <button class="chip" data-preset="dallas-elpaso">Dallas → El Paso (fuel plan)</button>
+        </div>
+        <div id="route-summary" class="card hidden"></div>
+        <div id="fuel-plan-card" class="card hidden"></div>
+        <button id="btn-clear-route" class="btn btn-ghost btn-block hidden">✕ Clear route</button>
+        <div class="footnote">Live data: OpenStreetMap · Overpass · OSRM. Fuel prices &amp; weigh-station status are <b>simulated</b> — verify before dispatch.</div>
+      </section>
+
+      <!-- FUEL -->
+      <section class="panel" id="panel-fuel">
+        <div class="btn-row">
+          <button id="btn-fuel-near-me" class="btn btn-ghost">📍 Near me</button>
+          <button id="btn-fuel-route" class="btn btn-ghost">🛣️ Along route</button>
+        </div>
+        <div class="subhead" id="fuel-subhead">Cheapest diesel near the map center.</div>
+        <div id="fuel-list" class="poi-list"></div>
+      </section>
+
+      <!-- SERVICE -->
+      <section class="panel" id="panel-service">
+        <div class="btn-row">
+          <button id="btn-svc-near-me" class="btn btn-ghost">📍 Near me</button>
+          <button id="btn-svc-route" class="btn btn-ghost">🛣️ Along route</button>
+        </div>
+        <div class="subhead" id="svc-subhead">Top-rated truck repair near the map center.</div>
+        <div id="svc-list" class="poi-list"></div>
+      </section>
+
+      <!-- ALERTS -->
+      <section class="panel" id="panel-alerts">
+        <div class="subhead">Live alert log</div>
+        <div id="alert-feed" class="poi-list"></div>
+      </section>
+
+      <!-- TRUCK / RIG -->
+      <section class="panel" id="panel-truck">
+        <div class="card">
+          <h3>Truck profile</h3>
+          <div class="form-grid">
+            <label>Height <span class="unit">ft/in</span>
+              <input id="truck-height-ft" type="number" min="8" max="15" step="0.5" value="13"> 
+            </label>
+            <label>Height <span class="unit">in</span>
+              <input id="truck-height-in" type="number" min="0" max="11" step="1" value="6">
+            </label>
+            <label>Gross weight <span class="unit">lb</span>
+              <input id="truck-weight" type="number" min="0" max="200000" step="500" value="80000">
+            </label>
+            <label>Tank <span class="unit">gal</span>
+              <input id="truck-tank" type="number" min="20" max="400" step="5" value="150">
+            </label>
+            <label>MPG
+              <input id="truck-mpg" type="number" min="3" max="12" step="0.1" value="6.5">
+            </label>
+            <label>Hazmat load
+              <select id="truck-hazmat">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </label>
+          </div>
+          <button id="btn-save-truck" class="btn btn-primary btn-block">SAVE PROFILE</button>
+        </div>
+        <div class="card">
+          <h3>Routing engine</h3>
+          <p class="hint">Default routing uses the free OSRM road network with on-board clearance/weight checks. Add a free <b>OpenRouteService</b> key for true HGV-class routing (avoids low bridges, honors weight &amp; hazmat).</p>
+          <label>OpenRouteService API key <span class="unit">optional</span>
+            <input id="ors-key" type="password" placeholder="5b3ce3…" autocomplete="off">
+          </label>
+          <label class="checkbox-row"><input id="truck-avoid-tolls" type="checkbox"> Avoid toll roads</label>
+          <button id="btn-save-ors" class="btn btn-primary btn-block">SAVE</button>
+        </div>
+        <div class="card">
+          <h3>Alert distances</h3>
+          <label>Weigh station alert <span class="unit">mi</span>
+            <input id="alert-weigh-mi" type="number" min="1" max="25" step="1" value="8">
+          </label>
+          <label>Low-clearance alert <span class="unit">mi</span>
+            <input id="alert-clear-mi" type="number" min="1" max="15" step="1" value="5">
+          </label>
+          <button id="btn-save-alerts" class="btn btn-primary btn-block">SAVE</button>
+        </div>
+        <div class="card">
+          <h3>Custom POIs</h3>
+          <p class="hint">Right-click the map to add your own weigh stations, low clearances, fuel stops or shops. Stored on this device.</p>
+          <button id="btn-clear-custom" class="btn btn-ghost btn-block">Clear custom POIs</button>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <!-- ============ HUD (while driving) ============ -->
+  <div id="hud" class="hidden">
+    <div class="hud-speed"><span id="hud-speed">0</span><em>mph</em></div>
+    <div class="hud-mid">
+      <div class="hud-row"><span class="hud-label">Heading</span><span id="hud-heading">—</span></div>
+      <div class="hud-row"><span class="hud-label">Next alert</span><span id="hud-next">—</span></div>
+      <div class="hud-row"><span class="hud-label">To destination</span><span id="hud-eta">—</span></div>
+    </div>
+    <div class="hud-fuel">
+      <div class="fuel-bar"><div id="hud-fuel-fill"></div></div>
+      <span id="hud-fuel-pct">100%</span>
+    </div>
+    <div class="hud-controls">
+      <button id="hud-slower" class="hud-btn">−</button>
+      <button id="hud-pause" class="hud-btn">⏸</button>
+      <button id="hud-faster" class="hud-btn">+</button>
+      <button id="hud-stop" class="hud-btn hud-stop">■</button>
+    </div>
+  </div>
+
+  <!-- ============ LEGEND ============ -->
+  <div id="legend">
+    <div class="legend-title">MAP LAYERS</div>
+    <label><input type="checkbox" id="ly-fuel" checked> <span class="lg lg-fuel"></span> Truck stops / fuel</label>
+    <label><input type="checkbox" id="ly-weigh" checked> <span class="lg lg-weigh"></span> Weigh stations</label>
+    <label><input type="checkbox" id="ly-clear" checked> <span class="lg lg-clear"></span> Low clearances</label>
+    <label><input type="checkbox" id="ly-svc" checked> <span class="lg lg-svc"></span> Repair shops</label>
+  </div>
+
+  <!-- ============ STATUS BAR ============ -->
+  <div id="statusbar">
+    <span id="status-msg">Ready. Plan a route, or hit GPS / DEMO DRIVE.</span>
+    <span class="status-right">
+      <span id="sim-clock" class="hidden">🕐 SIM <span id="sim-clock-t"></span></span>
+      <span class="pipe">|</span> Prices simulated
+    </span>
+  </div>
+
+  <!-- ============ TOASTS ============ -->
+  <div id="toasts"></div>
+
+  <!-- ============ CONTEXT MENU ============ -->
+  <div id="ctx-menu" class="hidden">
+    <button data-ctx="weigh">⚖️ Add weigh station</button>
+    <button data-ctx="clear">⚠️ Add low clearance</button>
+    <button data-ctx="fuel">⛽ Add fuel stop</button>
+    <button data-ctx="shop">🔧 Add repair shop</button>
+    <button data-ctx="cancel">Cancel</button>
+  </div>
+
+  <!-- ============ LOADING OVERLAY ============ -->
+  <div id="overlay" class="hidden">
+    <div class="spinner"></div>
+    <div id="overlay-msg">Planning route…</div>
+  </div>
+
+</div>
+
+<noscript><div style="padding:2em;font-family:sans-serif">RouteRig needs JavaScript enabled.</div></noscript>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/markercluster/leaflet.markercluster.js"></script>
+<script src="js/config.js"></script>
+<script src="js/util.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/data.js"></script>
+<script src="js/overpass.js"></script>
+<script src="js/fuel.js"></script>
+<script src="js/services.js"></script>
+<script src="js/routing.js"></script>
+<script src="js/drive.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
