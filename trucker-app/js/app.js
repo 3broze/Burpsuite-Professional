@@ -301,9 +301,37 @@
     $('#btn-locate .dot').className = 'dot dot-red';
     if (state.gpsMarker) { state.layers.gps.removeLayer(state.gpsMarker); state.gpsMarker = null; }
   };
-  RR.hooks.gpsError = function () {
+  RR.hooks.gpsStatus = function (msg) {
+    ui.setStatus('📡 ' + msg);
+  };
+  RR.hooks.gpsError = function (err) {
     $('#btn-locate').classList.remove('btn-gps-on');
     $('#btn-locate .dot').className = 'dot dot-red';
+    const msg = (err && err.message) ? err.message : String(err || 'GPS error');
+    ui.toast('GPS unavailable', 'warn', msg);
+    ui.gpsHelp(msg);
+    ui.setStatus('GPS unavailable — use approximate location, 🗺 map center, or type a city.');
+  };
+  RR.hooks.gpsRetry = function () {
+    drive.gps.start();
+  };
+  RR.hooks.gpsApprox = async function () {
+    ui.toast('Finding approximate location…', 'info');
+    const pos = await routing.ipLocation();
+    if (pos) {
+      drive.gps.stop(false);
+      drive.gps.pos = pos;
+      drive.gps.approximate = true;
+      if (state.gpsMarker) { state.layers.gps.removeLayer(state.gpsMarker); state.gpsMarker = null; }
+      state.gpsMarker = L.marker([pos.lat, pos.lng], { icon: RR.icons.gps(), zIndexOffset: 800 }).addTo(state.layers.gps);
+      state.map.flyTo([pos.lat, pos.lng], Math.max(state.map.getZoom(), 10), { duration: 0.8 });
+      $('#btn-locate').classList.add('btn-gps-on');
+      $('#btn-locate .dot').className = 'dot dot-green';
+      ui.toast('Using approximate location', 'success', pos.label || (pos.lat.toFixed(2) + ', ' + pos.lng.toFixed(2)) + ' — city-level only');
+      ui.setStatus('Approximate location active (' + (pos.label || 'city-level') + ') — plan routes from here.');
+    } else {
+      ui.toast('Approximate location failed', 'warn', 'This network also blocks the IP lookup. Use the 🗺 map-center button or type a city — both work fully offline.');
+    }
   };
 
   RR.hooks.gpsFix = function (g) {
@@ -394,7 +422,9 @@
     if (!originIn.value.trim()) {
       const pos = drive.gps.pos || (state.truckMarker ? state.truckMarker.getLatLng() : null);
       if (pos) {
-        originIn.value = drive.gps.pos ? 'My current GPS position' : 'Current truck position';
+        originIn.value = drive.gps.pos
+          ? (drive.gps.approximate ? 'My approximate location' : 'My current GPS position')
+          : 'Current truck position';
         originIn.dataset.lat = pos.lat;
         originIn.dataset.lng = pos.lng;
       } else {

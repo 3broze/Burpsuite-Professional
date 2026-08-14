@@ -175,6 +175,48 @@ async function scenarioC() {
   return fails;
 }
 
+/* ---------- scenario D: GPS blocked -> help dialog -> approximate location ---------- */
+async function scenarioD() {
+  const { w } = makeDom();
+  /* jsdom has no navigator.geolocation -> the not-supported path fires */
+  w.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('ipwho.is')) return jsonRes({ success: true, latitude: 32.78, longitude: -96.80, city: 'Dallas', region: 'Texas', country_code: 'US' });
+    return { ok: false, status: 500, json: async () => ({}) };
+  };
+  loadApp(w);
+  await wait(200);
+  const RR = w.RR, doc = w.document;
+  let fails = 0;
+  const check = (n, c, x) => { console.log((c ? 'ok   ' : 'FAIL ') + n + (x ? '  [' + x + ']' : '')); if (!c) fails++; };
+
+  doc.getElementById('btn-locate').click();
+  await wait(150);
+  check('location help dialog appears', !!doc.querySelector('.gpsh-approx'),
+    doc.querySelectorAll('#toasts .toast').length + ' toasts');
+  check('help mentions permission/lock icon', /lock|permission|location/i.test(doc.querySelector('#toasts').textContent));
+
+  /* approximate location via IP */
+  doc.querySelector('.gpsh-approx').click();
+  await wait(500);
+  check('approximate position set', RR.drive.gps.pos && Math.abs(RR.drive.gps.pos.lat - 32.78) < 0.01,
+    RR.drive.gps.pos && RR.drive.gps.pos.label);
+  check('approximate flag on', RR.drive.gps.approximate === true);
+
+  /* route from blank origin + destination only */
+  doc.getElementById('in-origin').value = '';
+  doc.getElementById('in-dest').value = 'Houston';
+  delete doc.getElementById('in-dest').dataset.lat;
+  delete doc.getElementById('in-dest').dataset.lng;
+  doc.getElementById('btn-route').click();
+  for (let i = 0; i < 40; i++) { await wait(150); if (RR.state.route && RR.state.originLL) break; }
+  check('route planned from approximate location', !!RR.state.route && RR.state.originLL &&
+    Math.abs(RR.state.originLL.lat - 32.78) < 0.01, RR.state.originLL && RR.state.originLL.label);
+  check('origin labeled approximate', doc.getElementById('in-origin').value.indexOf('approximate') >= 0,
+    doc.getElementById('in-origin').value);
+  return fails;
+}
+
 (async () => {
   console.log('--- Scenario A: live APIs + route options + voice ---');
   const fa = await scenarioA();
@@ -182,7 +224,9 @@ async function scenarioC() {
   const fb = await scenarioB();
   console.log('--- Scenario C: HTTP 504 everywhere + auto-origin ---');
   const fc = await scenarioC();
-  const total = fa + fb + fc;
+  console.log('--- Scenario D: GPS blocked -> help dialog -> approximate location ---');
+  const fd = await scenarioD();
+  const total = fa + fb + fc + fd;
   console.log(total === 0 ? '\n=== ALL SMOKE TESTS PASSED ===' : '\n=== FAILURES: ' + total + ' ===');
   process.exit(total ? 1 : 0);
 })().catch(e => { console.log('CRASH', e); process.exit(1); });

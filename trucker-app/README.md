@@ -43,6 +43,13 @@ then open <http://localhost:8000>. No build step, no backend — everything runs
 
 **Install on your phone:** open the app in Chrome (Android) or Safari (iOS) and tap **📲 Install** / **Share → Add to Home Screen**. It runs full-screen with an app icon and works offline for the app shell (live map data still needs internet).
 
+## GPS & current location
+
+- **Tap GPS** (top bar) — the browser asks for location permission; allow it once.
+- **Leave Origin blank** and type only a destination — the route starts from your live position automatically.
+- **Preview window blocks GPS?** The location-help dialog has an **↗ Open in new tab** button — browser location prompts work reliably in a real tab (or the standalone `RouteRig.html`).
+- **No signal / denied?** The dialog offers **📍 Approx. location** (city-level via IP) and the 🗺 map-center buttons — routes plan either way.
+
 ## Troubleshooting
 
 - **"Route planning failed"** — the status bar names the failing step (lookup / routing / live data) and the toast shows the exact API error. RouteRig retries geocoding on two providers (Nominatim + Photon) and routing on two OSRM servers. If everything fails, the boot self-test shows "Live data unreachable" — the app needs internet for tiles + OSM APIs; check your firewall/VPN.

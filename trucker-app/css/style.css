@@ -336,6 +336,10 @@ input, select { font-family: inherit; }
 .toast small { display: block; color: var(--muted); margin-top: 3px; }
 @keyframes slidein { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+.toast-actions { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
+.toast .chip { background: rgba(255,255,255,.06); font-size: 12px; padding: 5px 10px; }
+.toast .chip:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ---------- CONTEXT MENU ---------- */
 #ctx-menu {
   position: absolute; z-index: 1600;

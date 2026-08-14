@@ -12,6 +12,23 @@
     return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
   }
 
+  /* city-level position from IP when real GPS is unavailable (CORS-friendly) */
+  async function ipLocation() {
+    const providers = ['https://ipwho.is/', 'https://ipapi.co/json/'];
+    for (const u of providers) {
+      try {
+        const res = await fetchWithTimeout(u, 8000);
+        if (!res.ok) continue;
+        const json = await res.json();
+        const lat = parseFloat(json.latitude), lng = parseFloat(json.longitude);
+        if (!isFinite(lat) || !isFinite(lng)) continue;
+        const label = [json.city, json.region, json.country_code].filter(Boolean).join(', ');
+        return { lat: lat, lng: lng, label: label || ('~' + lat.toFixed(2) + ', ' + lng.toFixed(2)), approximate: true };
+      } catch (e) { /* next provider */ }
+    }
+    return null;
+  }
+
   /* offline gazetteer: 200+ US cities, no network needed */
   function localCityMatches(q) {
     const t = String(q || '').toLowerCase().trim();
@@ -537,7 +554,7 @@
   }
 
   const routing = {
-    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute, parseSteps,
+    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute, parseSteps, ipLocation,
     analyzeClearances, clearancesAround,
     weighStationsAlong, weighAround, weighStationsAlongLocal,
     fuelAlong, fuelAround, fuelAlongLocal,

@@ -1091,6 +1091,10 @@ input, select { font-family: inherit; }
 .toast small { display: block; color: var(--muted); margin-top: 3px; }
 @keyframes slidein { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+.toast-actions { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
+.toast .chip { background: rgba(255,255,255,.06); font-size: 12px; padding: 5px 10px; }
+.toast .chip:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ---------- CONTEXT MENU ---------- */
 #ctx-menu {
   position: absolute; z-index: 1600;
@@ -1471,7 +1475,7 @@ input, select { font-family: inherit; }
   'use strict';
   const CONFIG = {
     appName: 'RouteRig',
-    buildStamp: 8,
+    buildStamp: 9,
     defaultCenter: [32.985, -96.83], // Frisco / DFW area
     defaultZoom: 8,
     geocoder: 'https://nominatim.openstreetmap.org/search',
@@ -2677,6 +2681,23 @@ const US_CITIES = [
     return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
   }
 
+  /* city-level position from IP when real GPS is unavailable (CORS-friendly) */
+  async function ipLocation() {
+    const providers = ['https://ipwho.is/', 'https://ipapi.co/json/'];
+    for (const u of providers) {
+      try {
+        const res = await fetchWithTimeout(u, 8000);
+        if (!res.ok) continue;
+        const json = await res.json();
+        const lat = parseFloat(json.latitude), lng = parseFloat(json.longitude);
+        if (!isFinite(lat) || !isFinite(lng)) continue;
+        const label = [json.city, json.region, json.country_code].filter(Boolean).join(', ');
+        return { lat: lat, lng: lng, label: label || ('~' + lat.toFixed(2) + ', ' + lng.toFixed(2)), approximate: true };
+      } catch (e) { /* next provider */ }
+    }
+    return null;
+  }
+
   /* offline gazetteer: 200+ US cities, no network needed */
   function localCityMatches(q) {
     const t = String(q || '').toLowerCase().trim();
@@ -3202,7 +3223,7 @@ const US_CITIES = [
   }
 
   const routing = {
-    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute, parseSteps,
+    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute, parseSteps, ipLocation,
     analyzeClearances, clearancesAround,
     weighStationsAlong, weighAround, weighStationsAlongLocal,
     fuelAlong, fuelAround, fuelAlongLocal,
@@ -3475,32 +3496,69 @@ const US_CITIES = [
     speedMph: null,
     lastFix: null,
     error: null,
+    approximate: false,
+    retries: 0,
+
+    friendlyMessage(code) {
+      switch (code) {
+        case 1:
+          return 'Location permission is blocked for this page. Tap the 🔒 lock icon in the browser address bar → Location → Allow, then try again. If you are in the preview window, use the "Open in new tab" button below — location prompts work in a real tab.';
+        case 2:
+          return 'No GPS signal. Check that location services are enabled on this device and you are not deep indoors, then retry. You can also use your approximate city location.';
+        case 3:
+          return 'Location request timed out. GPS can be slow indoors — retry, or use your approximate city location.';
+        default:
+          return 'Location is not available in this environment. You can still plan routes: use approximate location, tap the 🗺 map-center button, or type a city name.';
+      }
+    },
 
     start() {
       if (!navigator.geolocation) {
-        RR.sink.onGpsError('Geolocation is not supported by this browser.');
+        RR.sink.onGpsError({ code: -1, message: this.friendlyMessage(-1) });
         return false;
       }
       this.active = true;
+      this.retries = 0;
+      this.approximate = false;
       RR.sink.onGpsStart();
-      this.watchId = navigator.geolocation.watchPosition(
-        (p) => this.onFix(p),
-        (e) => {
-          this.error = e && e.message ? e.message : 'Geolocation error';
-          RR.sink.onGpsError(this.error);
-        },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
-      );
+      this._watch();
       return true;
     },
 
-    stop() {
-      this.active = false;
+    _watch() {
       if (this.watchId != null) {
-        navigator.geolocation.clearWatch(this.watchId);
+        try { navigator.geolocation.clearWatch(this.watchId); } catch (e) { /* noop */ }
         this.watchId = null;
       }
-      RR.sink.onGpsStop();
+      this.watchId = navigator.geolocation.watchPosition(
+        (p) => this.onFix(p),
+        (e) => this.onError(e),
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
+      );
+    },
+
+    onError(e) {
+      const code = (e && e.code) || 0;
+      /* timeout: retry a couple of times before giving up */
+      if (code === 3 && this.retries < 2) {
+        this.retries++;
+        RR.sink.onGpsStatus('Still searching for GPS… attempt ' + (this.retries + 1) + ' of 3');
+        this._watch();
+        return;
+      }
+      this.stop(false);
+      this.error = { code: code, message: this.friendlyMessage(code) };
+      RR.sink.onGpsError(this.error);
+    },
+
+    stop(notify) {
+      this.active = false;
+      this.retries = 0;
+      if (this.watchId != null) {
+        try { navigator.geolocation.clearWatch(this.watchId); } catch (e) { /* noop */ }
+        this.watchId = null;
+      }
+      if (notify !== false) RR.sink.onGpsStop();
     },
 
     onFix(p) {
@@ -3510,6 +3568,8 @@ const US_CITIES = [
       if (c.speed != null) this.speedMph = c.speed * 2.23694;
       this.lastFix = new Date();
       this.error = null;
+      this.retries = 0;
+      this.approximate = false;
       RR.sink.onGpsFix(this);
     }
   };
@@ -3937,16 +3997,54 @@ const US_CITIES = [
         paused: false
       });
     },
-    onGpsError(msg) {
-      toast('GPS error', 'warn', msg);
-      if (RR.hooks.gpsError) RR.hooks.gpsError(msg);
+    onGpsStatus(msg) {
+      if (RR.hooks.gpsStatus) RR.hooks.gpsStatus(msg);
+    },
+    onGpsError(err) {
+      if (RR.hooks.gpsError) RR.hooks.gpsError(err);
     }
   };
+
+  /* ---------- location help dialog (retry / approximate / new tab) ---------- */
+  function inIframe() {
+    try { return window.self !== window.top; } catch (e) { return true; }
+  }
+
+  function gpsHelp(msg) {
+    const wrap = $('#toasts');
+    const t = document.createElement('div');
+    t.className = 'toast warn';
+    t.innerHTML = '<b>📡 Location help</b><small>' + util.esc(msg) + '</small><div class="toast-actions"></div>';
+    if (inIframe()) {
+      const urlEl = document.createElement('small');
+      urlEl.style.display = 'block';
+      urlEl.style.wordBreak = 'break-all';
+      urlEl.textContent = 'Open directly: ' + window.location.href;
+      t.appendChild(urlEl);
+    }
+    const actions = t.querySelector('.toast-actions');
+    const addBtn = (label, cls, fn) => {
+      const b = document.createElement('button');
+      b.className = 'chip ' + cls;
+      b.textContent = label;
+      b.onclick = () => { try { fn(); } catch (e) { /* noop */ } t.remove(); };
+      actions.appendChild(b);
+    };
+    addBtn('🔄 Retry GPS', 'gpsh-retry', () => RR.hooks.gpsRetry && RR.hooks.gpsRetry());
+    addBtn('📍 Approx. location', 'gpsh-approx', () => RR.hooks.gpsApprox && RR.hooks.gpsApprox());
+    if (inIframe()) addBtn('↗ Open in new tab', 'gpsh-tab', () => {
+      try { window.open(window.location.href, '_blank', 'noopener'); } catch (e) { /* noop */ }
+    });
+    addBtn('✕', 'gpsh-close', () => {});
+    wrap.appendChild(t);
+    while (wrap.children.length > 4) wrap.removeChild(wrap.firstChild);
+    setTimeout(() => { if (t.parentNode) t.remove(); }, 45000);
+  }
 
   const ui = {
     showOverlay, hideOverlay, setStatus, toast, addFeed, audio,
     renderFuelList, renderSvcList, renderRouteSummary, renderFuelPlanCard, renderDirections, navInfo,
-    bindSearch, hudVisible, hudUpdate, simClock, loadSettings, saveSettings,
+    bindSearch, hudVisible, hudUpdate, simClock, loadSettings, saveSettings, gpsHelp,
     popups: { fuel: fuelPopup, weigh: weighPopup, clear: clearPopup, shop: shopPopup }
   };
   RR.ui = ui;
@@ -4362,9 +4460,37 @@ const US_CITIES = [
     $('#btn-locate .dot').className = 'dot dot-red';
     if (state.gpsMarker) { state.layers.gps.removeLayer(state.gpsMarker); state.gpsMarker = null; }
   };
-  RR.hooks.gpsError = function () {
+  RR.hooks.gpsStatus = function (msg) {
+    ui.setStatus('📡 ' + msg);
+  };
+  RR.hooks.gpsError = function (err) {
     $('#btn-locate').classList.remove('btn-gps-on');
     $('#btn-locate .dot').className = 'dot dot-red';
+    const msg = (err && err.message) ? err.message : String(err || 'GPS error');
+    ui.toast('GPS unavailable', 'warn', msg);
+    ui.gpsHelp(msg);
+    ui.setStatus('GPS unavailable — use approximate location, 🗺 map center, or type a city.');
+  };
+  RR.hooks.gpsRetry = function () {
+    drive.gps.start();
+  };
+  RR.hooks.gpsApprox = async function () {
+    ui.toast('Finding approximate location…', 'info');
+    const pos = await routing.ipLocation();
+    if (pos) {
+      drive.gps.stop(false);
+      drive.gps.pos = pos;
+      drive.gps.approximate = true;
+      if (state.gpsMarker) { state.layers.gps.removeLayer(state.gpsMarker); state.gpsMarker = null; }
+      state.gpsMarker = L.marker([pos.lat, pos.lng], { icon: RR.icons.gps(), zIndexOffset: 800 }).addTo(state.layers.gps);
+      state.map.flyTo([pos.lat, pos.lng], Math.max(state.map.getZoom(), 10), { duration: 0.8 });
+      $('#btn-locate').classList.add('btn-gps-on');
+      $('#btn-locate .dot').className = 'dot dot-green';
+      ui.toast('Using approximate location', 'success', pos.label || (pos.lat.toFixed(2) + ', ' + pos.lng.toFixed(2)) + ' — city-level only');
+      ui.setStatus('Approximate location active (' + (pos.label || 'city-level') + ') — plan routes from here.');
+    } else {
+      ui.toast('Approximate location failed', 'warn', 'This network also blocks the IP lookup. Use the 🗺 map-center button or type a city — both work fully offline.');
+    }
   };
 
   RR.hooks.gpsFix = function (g) {
@@ -4455,7 +4581,9 @@ const US_CITIES = [
     if (!originIn.value.trim()) {
       const pos = drive.gps.pos || (state.truckMarker ? state.truckMarker.getLatLng() : null);
       if (pos) {
-        originIn.value = drive.gps.pos ? 'My current GPS position' : 'Current truck position';
+        originIn.value = drive.gps.pos
+          ? (drive.gps.approximate ? 'My approximate location' : 'My current GPS position')
+          : 'Current truck position';
         originIn.dataset.lat = pos.lat;
         originIn.dataset.lng = pos.lng;
       } else {

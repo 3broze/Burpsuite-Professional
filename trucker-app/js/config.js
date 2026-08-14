@@ -3,7 +3,7 @@
   'use strict';
   const CONFIG = {
     appName: 'RouteRig',
-    buildStamp: 8,
+    buildStamp: 9,
     defaultCenter: [32.985, -96.83], // Frisco / DFW area
     defaultZoom: 8,
     geocoder: 'https://nominatim.openstreetmap.org/search',

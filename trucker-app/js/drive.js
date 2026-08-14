@@ -259,32 +259,69 @@
     speedMph: null,
     lastFix: null,
     error: null,
+    approximate: false,
+    retries: 0,
+
+    friendlyMessage(code) {
+      switch (code) {
+        case 1:
+          return 'Location permission is blocked for this page. Tap the 🔒 lock icon in the browser address bar → Location → Allow, then try again. If you are in the preview window, use the "Open in new tab" button below — location prompts work in a real tab.';
+        case 2:
+          return 'No GPS signal. Check that location services are enabled on this device and you are not deep indoors, then retry. You can also use your approximate city location.';
+        case 3:
+          return 'Location request timed out. GPS can be slow indoors — retry, or use your approximate city location.';
+        default:
+          return 'Location is not available in this environment. You can still plan routes: use approximate location, tap the 🗺 map-center button, or type a city name.';
+      }
+    },
 
     start() {
       if (!navigator.geolocation) {
-        RR.sink.onGpsError('Geolocation is not supported by this browser.');
+        RR.sink.onGpsError({ code: -1, message: this.friendlyMessage(-1) });
         return false;
       }
       this.active = true;
+      this.retries = 0;
+      this.approximate = false;
       RR.sink.onGpsStart();
-      this.watchId = navigator.geolocation.watchPosition(
-        (p) => this.onFix(p),
-        (e) => {
-          this.error = e && e.message ? e.message : 'Geolocation error';
-          RR.sink.onGpsError(this.error);
-        },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
-      );
+      this._watch();
       return true;
     },
 
-    stop() {
-      this.active = false;
+    _watch() {
       if (this.watchId != null) {
-        navigator.geolocation.clearWatch(this.watchId);
+        try { navigator.geolocation.clearWatch(this.watchId); } catch (e) { /* noop */ }
         this.watchId = null;
       }
-      RR.sink.onGpsStop();
+      this.watchId = navigator.geolocation.watchPosition(
+        (p) => this.onFix(p),
+        (e) => this.onError(e),
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
+      );
+    },
+
+    onError(e) {
+      const code = (e && e.code) || 0;
+      /* timeout: retry a couple of times before giving up */
+      if (code === 3 && this.retries < 2) {
+        this.retries++;
+        RR.sink.onGpsStatus('Still searching for GPS… attempt ' + (this.retries + 1) + ' of 3');
+        this._watch();
+        return;
+      }
+      this.stop(false);
+      this.error = { code: code, message: this.friendlyMessage(code) };
+      RR.sink.onGpsError(this.error);
+    },
+
+    stop(notify) {
+      this.active = false;
+      this.retries = 0;
+      if (this.watchId != null) {
+        try { navigator.geolocation.clearWatch(this.watchId); } catch (e) { /* noop */ }
+        this.watchId = null;
+      }
+      if (notify !== false) RR.sink.onGpsStop();
     },
 
     onFix(p) {
@@ -294,6 +331,8 @@
       if (c.speed != null) this.speedMph = c.speed * 2.23694;
       this.lastFix = new Date();
       this.error = null;
+      this.retries = 0;
+      this.approximate = false;
       RR.sink.onGpsFix(this);
     }
   };

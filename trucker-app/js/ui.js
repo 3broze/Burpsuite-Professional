@@ -414,16 +414,54 @@
         paused: false
       });
     },
-    onGpsError(msg) {
-      toast('GPS error', 'warn', msg);
-      if (RR.hooks.gpsError) RR.hooks.gpsError(msg);
+    onGpsStatus(msg) {
+      if (RR.hooks.gpsStatus) RR.hooks.gpsStatus(msg);
+    },
+    onGpsError(err) {
+      if (RR.hooks.gpsError) RR.hooks.gpsError(err);
     }
   };
+
+  /* ---------- location help dialog (retry / approximate / new tab) ---------- */
+  function inIframe() {
+    try { return window.self !== window.top; } catch (e) { return true; }
+  }
+
+  function gpsHelp(msg) {
+    const wrap = $('#toasts');
+    const t = document.createElement('div');
+    t.className = 'toast warn';
+    t.innerHTML = '<b>📡 Location help</b><small>' + util.esc(msg) + '</small><div class="toast-actions"></div>';
+    if (inIframe()) {
+      const urlEl = document.createElement('small');
+      urlEl.style.display = 'block';
+      urlEl.style.wordBreak = 'break-all';
+      urlEl.textContent = 'Open directly: ' + window.location.href;
+      t.appendChild(urlEl);
+    }
+    const actions = t.querySelector('.toast-actions');
+    const addBtn = (label, cls, fn) => {
+      const b = document.createElement('button');
+      b.className = 'chip ' + cls;
+      b.textContent = label;
+      b.onclick = () => { try { fn(); } catch (e) { /* noop */ } t.remove(); };
+      actions.appendChild(b);
+    };
+    addBtn('🔄 Retry GPS', 'gpsh-retry', () => RR.hooks.gpsRetry && RR.hooks.gpsRetry());
+    addBtn('📍 Approx. location', 'gpsh-approx', () => RR.hooks.gpsApprox && RR.hooks.gpsApprox());
+    if (inIframe()) addBtn('↗ Open in new tab', 'gpsh-tab', () => {
+      try { window.open(window.location.href, '_blank', 'noopener'); } catch (e) { /* noop */ }
+    });
+    addBtn('✕', 'gpsh-close', () => {});
+    wrap.appendChild(t);
+    while (wrap.children.length > 4) wrap.removeChild(wrap.firstChild);
+    setTimeout(() => { if (t.parentNode) t.remove(); }, 45000);
+  }
 
   const ui = {
     showOverlay, hideOverlay, setStatus, toast, addFeed, audio,
     renderFuelList, renderSvcList, renderRouteSummary, renderFuelPlanCard, renderDirections, navInfo,
-    bindSearch, hudVisible, hudUpdate, simClock, loadSettings, saveSettings,
+    bindSearch, hudVisible, hudUpdate, simClock, loadSettings, saveSettings, gpsHelp,
     popups: { fuel: fuelPopup, weigh: weighPopup, clear: clearPopup, shop: shopPopup }
   };
   RR.ui = ui;
