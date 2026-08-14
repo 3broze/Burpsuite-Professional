@@ -1,6 +1,6 @@
 /* RouteRig service worker: NETWORK-FIRST so fixes always reach the cab,
    cache only as offline fallback. Bump CACHE version when assets change. */
-const CACHE = 'routerig-v6';
+const CACHE = 'routerig-v7';
 const ASSETS = [
   './',
   'index.html',

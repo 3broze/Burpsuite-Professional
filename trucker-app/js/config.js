@@ -3,13 +3,14 @@
   'use strict';
   const CONFIG = {
     appName: 'RouteRig',
-    buildStamp: 6,
+    buildStamp: 7,
     defaultCenter: [32.985, -96.83], // Frisco / DFW area
     defaultZoom: 8,
     geocoder: 'https://nominatim.openstreetmap.org/search',
     geocoders: [
       'https://nominatim.openstreetmap.org/search',
-      'https://photon.komoot.io/api/'
+      'https://photon.komoot.io/api/',
+      'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates'
     ],
     osrm: 'https://router.project-osrm.org/route/v1/driving/',
     osrmServers: [

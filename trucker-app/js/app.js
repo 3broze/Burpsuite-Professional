@@ -674,6 +674,15 @@
         ui.toast('Waiting for GPS fix…', 'info', 'Click 📍 again after the fix to use it as origin.');
       }
     });
+    function useMapCenterFor(input) {
+      const c = state.map.getCenter();
+      input.value = 'Map center (' + c.lat.toFixed(4) + ', ' + c.lng.toFixed(4) + ')';
+      input.dataset.lat = c.lat.toFixed(5);
+      input.dataset.lng = c.lng.toFixed(5);
+      ui.toast('Using map center as location', 'info', 'Works even with no internet.');
+    }
+    $('#btn-origin-map').addEventListener('click', () => useMapCenterFor($('#in-origin')));
+    $('#btn-dest-map').addEventListener('click', () => useMapCenterFor($('#in-dest')));
 
     document.querySelectorAll('.chip[data-preset]').forEach(c => c.addEventListener('click', () => {
       const p = data.PRESETS[c.dataset.preset];

@@ -5,6 +5,38 @@
   const { CONFIG, geo, util, overpass, fuel, services, data } = RR;
 
   /* ---------- geocoding ---------- */
+
+  function fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+  }
+
+  /* offline gazetteer: 200+ US cities, no network needed */
+  function localCityMatches(q) {
+    const t = String(q || '').toLowerCase().trim();
+    let name = t, st = '';
+    const parts = t.split(',').map(s => s.trim());
+    if (parts.length >= 2 && /^[a-z]{2}$/.test(parts[1])) { name = parts[0]; st = parts[1]; }
+    if (!name) return [];
+    const out = [];
+    for (const c of data.US_CITIES) {
+      const cn = c[0].toLowerCase();
+      let score = 0;
+      if (cn === name) score = 3;
+      else if (cn.startsWith(name)) score = 2;
+      else if (cn.includes(name)) score = 1;
+      if (!score) continue;
+      if (st && c[1].toLowerCase() !== st) continue;
+      out.push({ city: c, score: score });
+    }
+    out.sort((a, b) => b.score - a.score);
+    return out.slice(0, 6).map(o => ({
+      label: o.city[0] + ', ' + o.city[1] + ', USA',
+      lat: o.city[2], lng: o.city[3], offline: true
+    }));
+  }
+
   async function geocode(q) {
     const t = String(q || '').trim();
     if (!t) return [];
@@ -15,39 +47,63 @@
         return [{ label: lat.toFixed(5) + ', ' + lon.toFixed(5), lat: lat, lon: lon }];
       }
     }
-    /* NOTE: no custom headers — browsers treat User-Agent as a forbidden header,
-       and any custom header triggers a CORS preflight that OSM geocoders may reject. */
+    /* offline-first for plain city queries — instant and immune to gateway 504s */
+    const local = localCityMatches(t);
+    const qName = t.split(',')[0].trim().toLowerCase();
+    if (!/\d/.test(t) && local.length) {
+      const exact = local.filter(r => r.label.split(',')[0].toLowerCase() === qName);
+      if (exact.length) return exact;      // "Dallas" or "Dallas, TX" -> offline, instantly
+      if (t.length >= 4 && qName.length >= 4) return local; // solid partial city name
+    }
+
+    /* live lookup with timeouts + provider fallbacks */
     let lastErr = null;
     for (const base of CONFIG.geocoders) {
-      try {
-        const res = await fetch(base + '?q=' + encodeURIComponent(t) + '&limit=6&accept-language=en' +
-          (base.includes('photon') ? '&lang=en' : '&format=jsonv2'));
-        if (res.status === 429) throw new Error('Geocoder is busy (HTTP 429)');
-        if (!res.ok) throw new Error('Geocoder HTTP ' + res.status);
-        const json = await res.json();
-        if (base.includes('photon')) {
-          const out = (json.features || []).map(f => {
-            const p = f.properties || {};
-            const c = f.geometry && f.geometry.coordinates;
-            if (!c) return null;
-            const label = [p.name, p.city || p.county || p.state, p.state, p.country]
-              .filter((v, i, arr) => v && arr.indexOf(v) === i).join(', ');
-            return { label: label, lat: c[1], lon: c[0] };
-          }).filter(Boolean);
-          if (out.length) return out;
-          throw new Error('No results');
-        } else {
-          const out = (json || []).map(r => ({ label: r.display_name, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
-          if (out.length) return out;
-          throw new Error('No results');
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const url = base + (base.includes('arcgis')
+            ? '?f=json&singleLine=' + encodeURIComponent(t) + '&maxLocations=6&outFields=LongLabel'
+            : '?q=' + encodeURIComponent(t) + '&limit=6&accept-language=en' +
+              (base.includes('photon') ? '&lang=en' : '&format=jsonv2'));
+          const res = await fetchWithTimeout(url, 12000);
+          if (res.status === 429) throw new Error('Geocoder is busy (HTTP 429)');
+          if (!res.ok) throw new Error('Geocoder HTTP ' + res.status);
+          const json = await res.json();
+          if (base.includes('arcgis')) {
+            const out = (json.candidates || []).map(c => ({
+              label: c.address || 'ArcGIS match',
+              lat: c.location ? c.location.y : null,
+              lng: c.location ? c.location.x : null
+            })).filter(r => r.lat != null && r.lng != null);
+            if (out.length) return out;
+            throw new Error('No results');
+          } else if (base.includes('photon')) {
+            const out = (json.features || []).map(f => {
+              const p = f.properties || {};
+              const c = f.geometry && f.geometry.coordinates;
+              if (!c) return null;
+              const label = [p.name, p.city || p.county || p.state, p.state, p.country]
+                .filter((v, i, arr) => v && arr.indexOf(v) === i).join(', ');
+              return { label: label, lat: c[1], lon: c[0] };
+            }).filter(Boolean);
+            if (out.length) return out;
+            throw new Error('No results');
+          } else {
+            const out = (json || []).map(r => ({ label: r.display_name, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
+            if (out.length) return out;
+            throw new Error('No results');
+          }
+        } catch (e) {
+          lastErr = e;
+          if (e && e.name === 'AbortError') lastErr = new Error('Geocoder timed out');
         }
-      } catch (e) {
-        lastErr = e;
       }
     }
+    /* everything live failed -> offline gazetteer fallback */
+    if (local.length) return local;
     throw new Error('Could not look up \"' + t + '\" — ' +
       (lastErr && lastErr.message ? lastErr.message + '. ' : '') +
-      'Check your internet connection, or enter \"latitude, longitude\".');
+      'Address lookup is unreachable here. Use a demo haul preset, pick \"City, ST\" from the offline list, use the 🗺 map-center button, or type \"latitude, longitude\".');
   }
 
   /* ---------- route engines ---------- */
@@ -96,7 +152,7 @@
   async function routeOSRMMulti(o, d, base) {
     const url = (base || CONFIG.osrm) + o.lng + ',' + o.lat + ';' + d.lng + ',' + d.lat +
       '?overview=full&geometries=geojson&steps=true&alternatives=true';
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, 15000);
     if (!res.ok) throw new Error('Routing server HTTP ' + res.status);
     const json = await res.json();
     if (json.code !== 'Ok' || !json.routes || !json.routes.length) throw new Error('Routing server found no route');
