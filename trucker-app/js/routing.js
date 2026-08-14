@@ -112,6 +112,140 @@
       'Check your internet/firewall.');
   }
 
+  /* ---------- multiple route options ---------- */
+  async function routeOSRMMulti(o, d, base) {
+    const url = (base || CONFIG.osrm) + o.lng + ',' + o.lat + ';' + d.lng + ',' + d.lat +
+      '?overview=full&geometries=geojson&steps=false&alternatives=true';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Routing server HTTP ' + res.status);
+    const json = await res.json();
+    if (json.code !== 'Ok' || !json.routes || !json.routes.length) throw new Error('Routing server found no route');
+    return json.routes.map(r => ({
+      coords: r.geometry.coordinates.map(c => [c[1], c[0]]),
+      meters: r.distance, seconds: r.duration,
+      engine: 'OSRM (car roads + on-board truck checks)'
+    }));
+  }
+
+  /* last-resort straight-line route so planning never fails when routing APIs are blocked */
+  function straightLineRoute(o, d) {
+    const distM = geo.haversineM([o.lat, o.lng], [d.lat, d.lng]);
+    const n = Math.max(2, Math.ceil(distM / 4000) + 1);
+    const coords = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      coords.push([o.lat + (d.lat - o.lat) * t, o.lng + (d.lng - o.lng) * t]);
+    }
+    return {
+      id: 'fallback', label: 'Direct line (offline)',
+      coords: coords, meters: distM * 1.08, seconds: distM * 1.08 / 10.5,
+      engine: 'Fallback — direct line (live routing blocked)'
+    };
+  }
+
+  async function computeRouteOptions(o, d, truck) {
+    const out = [];
+    if (CONFIG.ors.key) {
+      try {
+        const r = await routeORS(o, d, truck);
+        r.id = 'hgv';
+        r.label = 'Truck-safe (HGV)';
+        out.push(r);
+      } catch (e) {
+        RR.toast('HGV routing failed (' + e.message + ') — using standard options', 'warn');
+      }
+    }
+    const seen = new Set();
+    for (const base of CONFIG.osrmServers) {
+      try {
+        const routes = await routeOSRMMulti(o, d, base);
+        for (const r of routes) {
+          const key = Math.round(r.meters / 50);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (out.length >= 4) break;
+          out.push(r);
+        }
+      } catch (e) { /* try next server */ }
+      if (out.length >= 4 || (out.length >= 2 && !CONFIG.ors.key)) break;
+    }
+    if (!out.length) out.push(straightLineRoute(o, d));
+
+    const byTime = [...out].sort((a, b) => (a.seconds || 1e12) - (b.seconds || 1e12));
+    const fastest = byTime[0];
+    let shortest = null;
+    for (const r of out) if (!shortest || r.meters < shortest.meters) shortest = r;
+    let alt = 1;
+    for (const r of out) {
+      if (r.label) continue;
+      if (r === fastest) r.label = 'Fastest';
+      else if (r === shortest && r !== fastest) r.label = 'Shortest';
+      else r.label = 'Alternate ' + (alt++);
+    }
+    out.forEach((r, i) => { r.id = r.id || 'opt-' + (i + 1); });
+    return out;
+  }
+
+  /* keep single-route API for compatibility */
+  async function computeRoute(o, d, truck) {
+    const opts = await computeRouteOptions(o, d, truck);
+    return opts[0];
+  }
+
+  /* ---------- no-network local fallbacks (clearly labeled as simulated) ---------- */
+  function weighStationsAlongLocal(coords, customWeigh) {
+    const cum = geo.cumulative(coords);
+    const list = [];
+    const seen = new Set();
+    for (const c of data.CURATED_WEIGH) {
+      seen.add(c.id);
+      list.push({ id: c.id, name: c.name, lat: c.lat, lng: c.lng, road: c.road, state: c.state, dir: c.dir, source: 'curated', curated: true });
+    }
+    for (const c of customWeigh || []) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      list.push({ id: c.id, name: c.name, lat: c.lat, lng: c.lng, road: c.road || 'custom POI', source: 'custom', curated: false });
+    }
+    for (const w of list) {
+      const proj = geo.projectOnLine([w.lat, w.lng], coords, cum);
+      if (proj) { w.distAlong = proj.alongM / 1609.344; w.crossM = proj.crossM; }
+    }
+    return list.filter(w => w.crossM != null && w.crossM <= 7000).sort((a, b) => a.distAlong - b.distAlong);
+  }
+
+  async function fuelAlongLocal(coords, customFuel) {
+    const cum = geo.cumulative(coords);
+    const stations = fuel.generateAlong(coords, cum);
+    for (const c of customFuel || []) {
+      const proj = geo.projectOnLine([c.lat, c.lng], coords, cum);
+      if (proj) {
+        stations.push({
+          id: c.id, name: c.name, lat: c.lat, lng: c.lng, brand: c.brand || 'Custom',
+          price: c.price != null ? c.price : fuel.dieselPrice(c.id, c.lat, c.lng),
+          amenities: c.amenities || [], truckStop: false, tags: {},
+          distAlong: proj.alongM / 1609.344, crossM: proj.crossM
+        });
+      }
+    }
+    return stations.filter(s => s.distAlong != null && s.crossM != null).sort((a, b) => a.price - b.price);
+  }
+
+  async function shopsAlongLocal(coords, customShops) {
+    const cum = geo.cumulative(coords);
+    const shops = services.generateAlong(coords, cum);
+    for (const c of customShops || []) {
+      const proj = geo.projectOnLine([c.lat, c.lng], coords, cum);
+      if (proj) {
+        shops.push({
+          id: c.id, name: c.name, lat: c.lat, lng: c.lng, type: 'custom', typeLabel: c.typeLabel || 'Repair shop',
+          rating: c.rating || 5, reviews: c.reviews || 1, services: c.services || [], phone: null,
+          truckCapable: true, tags: {}, distAlong: proj.alongM / 1609.344, crossM: proj.crossM
+        });
+      }
+    }
+    return services.rank(shops.filter(s => s.distAlong != null && s.crossM != null));
+  }
+
   /* ---------- clearance / restriction check along route ---------- */
   function minWayRouteDistance(wayPts, coords, cum) {
     const rStride = Math.max(1, Math.floor(coords.length / 900));
@@ -336,10 +470,11 @@
   }
 
   const routing = {
-    geocode, computeRoute, routeOSRM, routeORS,
+    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute,
     analyzeClearances, clearancesAround,
-    weighStationsAlong, weighAround,
-    fuelAlong, fuelAround, shopsAlong, shopsAround
+    weighStationsAlong, weighAround, weighStationsAlongLocal,
+    fuelAlong, fuelAround, fuelAlongLocal,
+    shopsAlong, shopsAround, shopsAlongLocal
   };
   RR.routing = routing;
   if (typeof module !== 'undefined' && module.exports) module.exports = routing;

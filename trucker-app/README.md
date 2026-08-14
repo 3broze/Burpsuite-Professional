@@ -17,7 +17,9 @@ then open <http://localhost:8000>. No build step, no backend — everything runs
 
 | Feature | How it works |
 |---|---|
-| 🛣️ **Truck routing** | Free OSRM road network + on-board truck checks. Optional: paste a free [OpenRouteService](https://openrouteservice.org) API key in the **Rig** tab for true HGV-class routing (height/weight/hazmat restrictions honored). |
+| 🛣️ **Truck routing** | Free OSRM road network + on-board truck checks. **Multiple route options** (Fastest / Shortest / Alternates) appear as chips after planning — tap to switch; hazards, fuel and services re-analyze per option. Optional: paste a free [OpenRouteService](https://openrouteservice.org) API key in the **Rig** tab for true HGV-class routing (height/weight/hazmat restrictions honored). |
+| 🌐 **Works offline / firewalled** | If live APIs are unreachable, RouteRig degrades gracefully: direct-line route fallback, simulated fuel stops & repair shops generated along the route, curated weigh stations — all clearly labeled OFFLINE DATA. A boot self-test shows ✓/✗ per service (routing, lookup, POI, tiles) in the status bar. |
+| 🗺️ **Readable maps** | Three base maps via the 🌗 button: **Streets (light)** default with clear street & freeway labels, Dark cab mode, and OSM Standard with maximum label detail. |
 | ⚠️ **Low-clearance warnings** | Live OSM `maxheight` / `maxheight:physical` / `maxweight` data queried along your route corridor. Anything under your rig's height (default 13'6") triggers a red alert with the exact clearance — including alerts while driving. |
 | ⚖️ **Weigh-station alerts** | Live OSM weighbridge data + a curated list of known weigh stations + your own custom POIs. Status (open/closed) is **simulated** from time-of-day. Alerts fire X miles ahead (configurable) during the drive. |
 | ⛽ **Cheap-fuel routes** | Live fuel stops from OSM with **simulated** (realistic, deterministic daily) diesel prices. The fuel planner figures out where to stop given your tank/MPG, compares stop cost vs. route-average price, and includes detour cost so a cheaper stop 2 miles off-route still wins when it pays. |

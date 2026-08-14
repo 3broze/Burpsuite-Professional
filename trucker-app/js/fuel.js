@@ -134,7 +134,28 @@
     };
   }
 
-  const fuel = { dieselPrice, stationFromEl, attachCorridor, buildFuelPlan, brandFromName, amenitiesFor, isMajorChain };
+  /* generate simulated fuel stops every ~35 mi along a route (offline fallback) */
+  function generateAlong(coords, cum) {
+    const totalM = cum[cum.length - 1] || 0;
+    const stations = [];
+    for (let m = 40 * 1609.344; m < totalM; m += 38 * 1609.344) {
+      const pos = RR.geo.pointAtAlong(coords, cum, m);
+      const id = 'sim-fuel-' + Math.round(m / 1609);
+      const lat = pos[0] + (util.hash01(id + ':lat') - 0.5) * 0.02;
+      const lng = pos[1] + (util.hash01(id + ':lng') - 0.5) * 0.02;
+      const brand = util.pick(data.TRUCK_BRANDS, id);
+      stations.push({
+        id: id, name: brand + ' Travel Center (simulated)', lat: lat, lng: lng,
+        brand: brand, price: dieselPrice(id, lat, lng),
+        amenities: ['Truck parking', 'DEF', 'Scale'],
+        truckStop: true, simulated: true, tags: {},
+        distAlong: m / 1609.344, crossM: 0
+      });
+    }
+    return stations;
+  }
+
+  const fuel = { dieselPrice, stationFromEl, attachCorridor, buildFuelPlan, brandFromName, amenitiesFor, isMajorChain, generateAlong };
   RR.fuel = fuel;
   if (typeof module !== 'undefined' && module.exports) module.exports = fuel;
 })(typeof window !== 'undefined' ? window : globalThis);

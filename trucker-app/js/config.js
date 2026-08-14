@@ -27,8 +27,11 @@
     overpassTimeout: 40000,
     tiles: {
       light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      osm: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
     },
+    themes: ['light', 'dark', 'osm'],
+    themeNames: { light: 'Streets (light)', dark: 'Dark cab mode', osm: 'OSM Standard (max labels)' },
     tileAttribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     // truck defaults (13'6" / 80,000 lb / 150 gal / 6.5 mpg)
     truckDefaults: { heightFt: 13, heightIn: 6, weightLb: 80000, tankGal: 150, mpg: 6.5, hazmat: false, avoidTolls: false },

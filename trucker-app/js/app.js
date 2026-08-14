@@ -54,7 +54,8 @@
 
   function setTileTheme(theme) {
     if (state.tile) state.map.removeLayer(state.tile);
-    state.tile = L.tileLayer(CONFIG.tiles[theme === 'light' ? 'light' : 'dark'], {
+    const url = CONFIG.tiles[theme] || CONFIG.tiles.light;
+    state.tile = L.tileLayer(url, {
       attribution: CONFIG.tileAttribution, maxZoom: 19
     });
     state.tile.addTo(state.map);
@@ -256,6 +257,30 @@
     return r;
   }
 
+  /* ---- corridor data with graceful fallback (live -> local simulated) ---- */
+  async function corridorData(planId) {
+    const tasks = [
+      ['clears', () => routing.analyzeClearances(state.coords, state.truck, state.custom.clear)],
+      ['weighs', () => routing.weighStationsAlong(state.coords, state.custom.weigh)],
+      ['fuel', () => routing.fuelAlong(state.coords, state.custom.fuel)],
+      ['shops', () => routing.shopsAlong(state.coords, state.custom.shop)]
+    ];
+    const settled = await Promise.allSettled(tasks.map(t => t[1]()));
+    if (planId !== state.planId) return null;
+    const got = {};
+    const failures = [];
+    settled.forEach((s, i) => {
+      const key = tasks[i][0];
+      if (s.status === 'fulfilled') got[key] = s.value;
+      else { got[key] = []; failures.push(key); }
+    });
+    /* local fallbacks so the app always has something useful */
+    if (!got.weighs.length) got.weighs = routing.weighStationsAlongLocal(state.coords, state.custom.weigh);
+    if (!got.fuel.length) got.fuel = await routing.fuelAlongLocal(state.coords, state.custom.fuel);
+    if (!got.shops.length) got.shops = await routing.shopsAlongLocal(state.coords, state.custom.shop);
+    return { got: got, failures: failures };
+  }
+
   async function planRoute() {
     const originIn = $('#in-origin'), destIn = $('#in-dest');
     if (!originIn.value.trim() || !destIn.value.trim()) {
@@ -274,114 +299,141 @@
       state.originLL = origin;
       state.destLL = dest;
 
-      /* ---- step 2: compute the route ---- */
+      /* ---- step 2: compute route options ---- */
       ui.setStatus('Step 2/3: routing ' + origin.label.split(',')[0] + ' → ' + dest.label.split(',')[0] + '…');
-      const route = await routing.computeRoute(origin, dest, state.truck);
+      const options = await routing.computeRouteOptions(origin, dest, state.truck);
       if (planId !== state.planId) return;
-      state.route = route;
-      state.coords = route.coords;
-      state.cum = geo.cumulative(route.coords);
-      drawRoute();
-      ui.setStatus('Route ready — step 3/3: checking truck hazards, fuel & services…');
+      state.routeOptions = options;
+      renderOptionChips(options, options[0].id);
 
-      /* ---- step 3: corridor data (non-fatal — route stands on its own) ---- */
-      const tasks = [
-        ['clearances', () => routing.analyzeClearances(state.coords, state.truck, state.custom.clear)],
-        ['weighs', () => routing.weighStationsAlong(state.coords, state.custom.weigh)],
-        ['fuel', () => routing.fuelAlong(state.coords, state.custom.fuel)],
-        ['shops', () => routing.shopsAlong(state.coords, state.custom.shop)]
-      ];
-      const settled = await Promise.allSettled(tasks.map(t => t[1]()));
+      /* ---- step 3: select best option and gather corridor data ---- */
+      ui.setStatus('Step 3/3: checking truck hazards, fuel & services…');
+      await selectRouteOption(options[0].id, planId, true);
       if (planId !== state.planId) return;
-      const got = {};
-      const failures = [];
-      settled.forEach((s, i) => {
-        const key = tasks[i][0];
-        if (s.status === 'fulfilled') got[key] = s.value;
-        else { got[key] = []; failures.push(key + ' (' + (s.reason && s.reason.message ? s.reason.message : 'unavailable') + ')'); }
-      });
 
-      state.clears = got.clearances;
-      state.weighs = got.weighs;
-      state.stations = got.fuel;
-      state.shops = got.shops;
-      addClearMarkers(state.clears);
-      addWeighMarkers(state.weighs);
-      addFuelMarkers(state.stations);
-      addShopMarkers(state.shops);
-
-      state.routeState = {
-        coords: state.coords, cum: state.cum,
-        weighs: state.weighs, clears: state.clears, stations: state.stations, shops: state.shops,
-        truck: state.truck,
-        meters: route.meters, seconds: route.seconds
-      };
-
-      const plan = state.stations.length
-        ? fuel.buildFuelPlan(route.meters, state.stations, state.truck)
-        : null;
-      ui.renderRouteSummary(state);
-      ui.renderFuelPlanCard(plan);
-      ui.renderFuelList(state.stations,
-        state.stations.length
-          ? 'Cheapest diesel along your route (' + state.stations.length + ' stops).'
-          : 'Fuel data unavailable for this route right now — use "Near me" to retry.');
-      ui.renderSvcList(state.shops,
-        state.shops.length
-          ? 'Best-rated repair along your route (' + state.shops.length + ' shops).'
-          : 'Repair shop data unavailable right now — use "Near me" to retry.');
-      $('#btn-clear-route').classList.remove('hidden');
-
-      const danger = state.clears.filter(c => c.severity === 'danger').length;
-      const nearDanger = state.clears.find(c => c.severity === 'danger' && c.distAlong < 2);
       ui.hideOverlay();
-      if (failures.length) {
-        ui.toast('Route OK — some live data skipped', 'warn',
-          'Could not load: ' + failures.join('; ') + '. The route is shown; retry in a moment.');
+      const opt = state.route;
+      if (opt && opt.engine && opt.engine.indexOf('Fallback') === 0) {
+        ui.toast('Live routing blocked — using direct line', 'warn',
+          'External routing APIs are unreachable from this network. Route shown as a straight line; use an ORS key for full routing.');
       }
-      if (nearDanger) {
-        RR.sink.alert({
-          type: 'clear', severity: 'danger',
-          title: 'Route passes ' + nearDanger.name + ' at mile ' + util.fmtMi(nearDanger.distAlong),
-          detail: nearDanger.msg, lat: nearDanger.lat, lng: nearDanger.lng
-        });
-      } else if (danger) {
-        ui.toast('⚠️ ' + danger + ' low clearance(s) on this route', 'warn', 'See map + Alerts tab. Check your truck height matches.');
+      if (options.length > 1) {
+        ui.toast('Route options ready', 'success',
+          'Pick between ' + options.length + ' options: ' + options.map(o => o.label).join(', ') + '.');
       }
-      ui.setStatus('Route ' + util.fmtMi(route.meters / 1609.344) + ' · ' + state.weighs.length + ' weigh stations · ' + danger + ' clearance hazards · ready to drive');
-      ui.toast('Route planned', 'success', util.fmtMi(route.meters / 1609.344) + ' · hit DEMO DRIVE or GPS to start');
     } catch (e) {
       if (planId !== state.planId) return;
       ui.hideOverlay();
       const msg = e && e.message ? e.message : 'Unknown error';
       ui.toast('Route planning failed', 'danger', msg);
       ui.setStatus('Route planning failed — ' + msg);
-      /* eslint-disable-next-line no-console */
       console.error('[RouteRig] route planning error:', e);
+    }
+  }
+
+  async function selectRouteOption(id, planId, initial) {
+    const opt = (state.routeOptions || []).find(o => o.id === id);
+    if (!opt) return;
+    if (state.sim && state.sim.running) state.sim.stop(false);
+    state.route = opt;
+    state.coords = opt.coords;
+    state.cum = geo.cumulative(opt.coords);
+    drawRoute();
+    ui.setStatus('Option "' + opt.label + '" selected — checking hazards, fuel & services…');
+
+    const cd = await corridorData(planId || state.planId);
+    if (!cd) return;
+    const got = cd.got;
+    state.clears = got.clears;
+    state.weighs = got.weighs;
+    state.stations = got.fuel;
+    state.shops = got.shops;
+    state.liveData = { clears: cd.failures.indexOf('clears') === -1, weighs: cd.failures.indexOf('weighs') === -1,
+                       fuel: cd.failures.indexOf('fuel') === -1, shops: cd.failures.indexOf('shops') === -1 };
+
+    addClearMarkers(state.clears);
+    addWeighMarkers(state.weighs);
+    addFuelMarkers(state.stations);
+    addShopMarkers(state.shops);
+
+    state.routeState = {
+      coords: state.coords, cum: state.cum,
+      weighs: state.weighs, clears: state.clears, stations: state.stations, shops: state.shops,
+      truck: state.truck,
+      meters: opt.meters, seconds: opt.seconds
+    };
+
+    const plan = state.stations.length
+      ? fuel.buildFuelPlan(opt.meters, state.stations, state.truck)
+      : null;
+    ui.renderRouteSummary(state);
+    ui.renderFuelPlanCard(plan);
+    ui.renderFuelList(state.stations,
+      state.stations.length
+        ? (state.liveData.fuel
+            ? 'Cheapest diesel along your route (' + state.stations.length + ' stops).'
+            : 'Simulated diesel stops along your route (live fuel data blocked).')
+        : 'No fuel data for this route — use "Near me" to retry.');
+    ui.renderSvcList(state.shops,
+      state.shops.length
+        ? (state.liveData.shops
+            ? 'Best-rated repair along your route (' + state.shops.length + ' shops).'
+            : 'Simulated repair shops along your route (live data blocked).')
+        : 'No repair shops mapped for this route — use "Near me" to retry.');
+    $('#btn-clear-route').classList.remove('hidden');
+
+    const danger = state.clears.filter(c => c.severity === 'danger').length;
+    const nearDanger = state.clears.find(c => c.severity === 'danger' && c.distAlong < 2);
+    if (initial && cd.failures.length) {
+      ui.toast('Route OK — some live data substituted', 'warn',
+        'Blocked here: ' + cd.failures.join(', ') + '. Using simulated/curated data (labeled).');
+    }
+    if (nearDanger) {
+      RR.sink.alert({
+        type: 'clear', severity: 'danger',
+        title: 'Route passes ' + nearDanger.name + ' at mile ' + util.fmtMi(nearDanger.distAlong),
+        detail: nearDanger.msg, lat: nearDanger.lat, lng: nearDanger.lng
+      });
+    } else if (danger) {
+      ui.toast('⚠️ ' + danger + ' low clearance(s) on this route', 'warn', 'See map + Alerts tab. Check your truck height matches.');
+    }
+    ui.setStatus('Option ' + opt.label + ': ' + util.fmtMi(opt.meters / 1609.344) + ' · ' +
+      state.weighs.length + ' weigh stations · ' + danger + ' clearance hazards · ready to drive');
+    if (!initial) {
+      ui.toast('Route option switched', 'success', opt.label + ' · ' + util.fmtMi(opt.meters / 1609.344));
+    }
+  }
+
+  function renderOptionChips(options, selectedId) {
+    const wrap = $('#route-opt-chips');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    $('#route-options').classList.remove('hidden');
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.className = 'chip option-chip' + (o.id === selectedId ? ' option-active' : '');
+      b.innerHTML = '⏱ ' + util.fmtClock(o.seconds) + ' · ' + util.fmtMi(o.meters / 1609.344) +
+        ' — ' + util.esc(o.label);
+      b.title = o.engine || '';
+      b.onclick = () => selectRouteOption(o.id);
+      wrap.appendChild(b);
     }
   }
 
   async function refreshCorridors() {
     if (!state.route) return;
-    try {
-      const [clears, weighs, stations, shops] = await Promise.all([
-        routing.analyzeClearances(state.coords, state.truck, state.custom.clear),
-        routing.weighStationsAlong(state.coords, state.custom.weigh),
-        routing.fuelAlong(state.coords, state.custom.fuel),
-        routing.shopsAlong(state.coords, state.custom.shop)
-      ]);
-      state.clears = clears; state.weighs = weighs; state.stations = stations; state.shops = shops;
-      addClearMarkers(clears); addWeighMarkers(weighs); addFuelMarkers(stations); addShopMarkers(shops);
-      state.routeState.weighs = weighs;
-      state.routeState.clears = clears;
-      state.routeState.stations = stations;
-      ui.renderFuelList(stations, 'Cheapest diesel along your route.');
-      ui.renderSvcList(shops, 'Best-rated repair along your route.');
-      ui.renderRouteSummary(state);
-      ui.renderFuelPlanCard(fuel.buildFuelPlan(state.route.meters, stations, state.truck));
-    } catch (e) {
-      ui.toast('Could not refresh corridor data', 'warn', e.message);
-    }
+    const cd = await corridorData(state.planId);
+    if (!cd) return;
+    const got = cd.got;
+    state.clears = got.clears; state.weighs = got.weighs; state.stations = got.fuel; state.shops = got.shops;
+    addClearMarkers(got.clears); addWeighMarkers(got.weighs); addFuelMarkers(got.fuel); addShopMarkers(got.shops);
+    state.routeState.weighs = got.weighs;
+    state.routeState.clears = got.clears;
+    state.routeState.stations = got.fuel;
+    ui.renderFuelList(got.fuel, 'Cheapest diesel along your route.');
+    ui.renderSvcList(got.shops, 'Best-rated repair along your route.');
+    ui.renderRouteSummary(state);
+    ui.renderFuelPlanCard(fuel.buildFuelPlan(state.route.meters, got.fuel, state.truck));
   }
 
   function clearRoute() {
@@ -401,6 +453,9 @@
     $('#route-summary').classList.add('hidden');
     $('#fuel-plan-card').classList.add('hidden');
     $('#btn-clear-route').classList.add('hidden');
+    $('#route-options').classList.add('hidden');
+    state.routeOptions = [];
+    state.liveData = null;
     ui.renderFuelList([], 'Plan a route to find cheap diesel along the way.');
     ui.renderSvcList([], 'Plan a route to find repair shops along the way.');
     ui.setStatus('Route cleared.');
@@ -544,8 +599,11 @@
     });
 
     $('#btn-theme').addEventListener('click', () => {
-      setTileTheme(RR.settings.theme === 'dark' ? 'light' : 'dark');
-      ui.toast('Map theme: ' + RR.settings.theme, 'info');
+      const themes = CONFIG.themes;
+      const cur = themes.indexOf(RR.settings.theme);
+      const next = themes[(cur + 1) % themes.length];
+      setTileTheme(next);
+      ui.toast('Map: ' + (CONFIG.themeNames[next] || next), 'info');
     });
 
     $('#btn-fuel-near-me').addEventListener('click', async () => {
@@ -668,21 +726,27 @@
   /* ---------- connectivity self-test (informational) ---------- */
   async function diagConnections() {
     const checks = [
-      ['routing', 'https://router.project-osrm.org/route/v1/driving/0,0;0.001,0?overview=false'],
-      ['address lookup', 'https://nominatim.openstreetmap.org/search?format=jsonv2&q=x&limit=1'],
-      ['POI data', 'https://overpass-api.de/api/status']
+      ['routing', 'https://router.project-osrm.org/route/v1/driving/0,0;0.001,0?overview=false', 'cors'],
+      ['lookup', 'https://nominatim.openstreetmap.org/search?format=jsonv2&q=x&limit=1', 'cors'],
+      ['POI', 'https://overpass-api.de/api/status', 'cors'],
+      ['tiles', 'https://tile.openstreetmap.org/4/7/6.png', 'no-cors']
     ];
-    const results = await Promise.allSettled(checks.map(([, url]) => fetch(url, { mode: 'cors' })));
+    const results = await Promise.allSettled(checks.map(([, url, mode]) => fetch(url, { mode: mode })));
+    const flags = [];
     const failed = [];
     results.forEach((r, i) => {
-      const ok = r.status === 'fulfilled' && r.value.ok;
+      /* no-cors "opaque" response still proves the host is reachable */
+      const ok = r.status === 'fulfilled';
+      flags.push(checks[i][0] + (ok ? ' ✓' : ' ✗'));
       if (!ok) failed.push(checks[i][0]);
     });
     if (failed.length === checks.length) {
-      ui.toast('Live data unreachable', 'warn', 'Routing, address lookup and POI data are all blocked — check your internet connection or firewall. You can still explore the map.');
-      ui.setStatus('Live data APIs unreachable — check your internet connection.');
+      ui.toast('Live data unreachable', 'warn', 'All map-data APIs are blocked from this network. The app still works: routes fall back to direct lines and stations are simulated (labeled).');
+      ui.setStatus('🌐 ' + flags.join(' · ') + ' — all live data blocked; using offline fallbacks');
     } else if (failed.length) {
-      ui.setStatus('Note: ' + failed.join(', ') + ' may be unreachable — some features will fall back.');
+      ui.setStatus('🌐 ' + flags.join(' · ') + ' — blocked services fall back automatically');
+    } else {
+      ui.setStatus('🌐 ' + flags.join(' · ') + ' — all live data OK');
     }
   }
 

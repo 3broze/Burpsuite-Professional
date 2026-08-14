@@ -90,7 +90,8 @@
     const off = s.crossM != null ? ' · <b>' + util.fmtMi(s.crossM / 1609.344) + '</b> off route' : '';
     const on = s.distAlong != null ? 'Mile <b>' + util.fmtMi(s.distAlong) + '</b> on route' + off : '';
     return '<b>' + util.esc(s.name) + '</b><br>' +
-      '<span class="big-price" style="font-size:20px">' + util.fmtPrice(s.price) + '</span> /gal diesel <span style="color:#8b98a9">(simulated)</span><br>' +
+      '<span class="big-price" style="font-size:20px">' + util.fmtPrice(s.price) + '</span> /gal diesel <span style="color:#8b98a9">(simulated)</span>' +
+      (s.simulated ? ' <span class="badge badge-red">OFFLINE DATA</span>' : '') + '<br>' +
       '<span class="badge badge-truck">' + util.esc(s.brand) + '</span>' +
       (s.truckStop ? '<span class="badge badge-green">Truck stop</span>' : '') + '<br>' +
       s.amenities.map(a => '<span class="badge badge-blue">' + util.esc(a) + '</span>').join(' ') + '<br>' +
@@ -117,6 +118,7 @@
   }
   function shopPopup(s) {
     return '<b>' + util.esc(s.name) + '</b><br>' +
+      (s.simulated ? '<span class="badge badge-red">OFFLINE DATA</span>' : '') +
       '<span class="badge badge-blue">' + util.esc(s.typeLabel) + '</span>' +
       '<span class="rating">★ ' + s.rating.toFixed(1) + '</span> <small style="color:#8b98a9">(' + s.reviews + ' reviews · simulated)</small><br>' +
       s.services.slice(0, 4).map(x => '• ' + util.esc(x)).join('<br>') + '<br>' +
@@ -182,7 +184,7 @@
     const clears = (state.clears || []).filter(c => c.severity === 'danger').length;
     el.classList.remove('hidden');
     el.innerHTML =
-      '<h3>Route summary</h3>' +
+      '<h3>Route summary' + (r.label ? ' <small style="color:#ffb35c">(' + util.esc(r.label) + ')</small>' : '') + '</h3>' +
       '<div class="stat-row"><span>Distance</span><span class="v">' + util.fmtMi(r.meters / 1609.344) + '</span></div>' +
       '<div class="stat-row"><span>Est. drive time</span><span class="v">' + util.fmtClock(r.seconds || (r.meters / 24.6)) + '</span></div>' +
       '<div class="stat-row"><span>Fuel needed</span><span class="v">' + util.fmtGal(gal) + '</span></div>' +
@@ -295,7 +297,13 @@
     truck.heightM = (truck.heightFt + truck.heightIn / 12) * 0.3048;
     const al = Object.assign({}, CONFIG.alertDistDefaults, util.store.get('alertDist', {}));
     const orsKey = util.store.get('orsKey', '');
-    const theme = util.store.get('theme', 'dark');
+    let theme = util.store.get('theme', 'light');
+    /* one-time migration: the old default was dark — move to readable streets */
+    if (!util.store.get('themeMigrated', false)) {
+      util.store.set('themeMigrated', true);
+      if (theme === 'dark') theme = 'light';
+      util.store.set('theme', theme);
+    }
     CONFIG.ors.key = orsKey || '';
     return { truck: truck, alertWeighMi: al.weighMi, alertClearMi: al.clearMi, orsKey: orsKey, theme: theme };
   }

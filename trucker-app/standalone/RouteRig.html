@@ -902,6 +902,17 @@ input, select { font-family: inherit; }
   border-radius: 20px; padding: 5px 12px; font-size: 12.5px;
 }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
+.opt-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.option-chip {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 7px 10px; font-size: 12.5px; font-weight: 600;
+  letter-spacing: .02em;
+}
+.option-chip:hover { border-color: var(--accent); }
+.option-chip.option-active {
+  border-color: var(--accent); color: #16130c; background: var(--accent);
+  box-shadow: 0 0 10px rgba(255,140,26,.35);
+}
 
 .subhead { color: var(--muted); font-size: 12.5px; margin-bottom: 8px; }
 .footnote { margin-top: 14px; font-size: 11px; color: var(--muted); line-height: 1.5; }
@@ -1159,6 +1170,10 @@ input, select { font-family: inherit; }
           <button class="chip" data-preset="dallas-houston">Dallas → Houston</button>
           <button class="chip" data-preset="dallas-elpaso">Dallas → El Paso (fuel plan)</button>
         </div>
+        <div id="route-options" class="hidden">
+          <span class="preset-label">Route options — tap to switch:</span>
+          <div id="route-opt-chips" class="opt-wrap"></div>
+        </div>
         <div id="route-summary" class="card hidden"></div>
         <div id="fuel-plan-card" class="card hidden"></div>
         <button id="btn-clear-route" class="btn btn-ghost btn-block hidden">✕ Clear route</button>
@@ -1350,8 +1365,11 @@ input, select { font-family: inherit; }
     overpassTimeout: 40000,
     tiles: {
       light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      osm: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
     },
+    themes: ['light', 'dark', 'osm'],
+    themeNames: { light: 'Streets (light)', dark: 'Dark cab mode', osm: 'OSM Standard (max labels)' },
     tileAttribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     // truck defaults (13'6" / 80,000 lb / 150 gal / 6.5 mpg)
     truckDefaults: { heightFt: 13, heightIn: 6, weightLb: 80000, tankGal: 150, mpg: 6.5, hazmat: false, avoidTolls: false },
@@ -2086,7 +2104,28 @@ input, select { font-family: inherit; }
     };
   }
 
-  const fuel = { dieselPrice, stationFromEl, attachCorridor, buildFuelPlan, brandFromName, amenitiesFor, isMajorChain };
+  /* generate simulated fuel stops every ~35 mi along a route (offline fallback) */
+  function generateAlong(coords, cum) {
+    const totalM = cum[cum.length - 1] || 0;
+    const stations = [];
+    for (let m = 40 * 1609.344; m < totalM; m += 38 * 1609.344) {
+      const pos = RR.geo.pointAtAlong(coords, cum, m);
+      const id = 'sim-fuel-' + Math.round(m / 1609);
+      const lat = pos[0] + (util.hash01(id + ':lat') - 0.5) * 0.02;
+      const lng = pos[1] + (util.hash01(id + ':lng') - 0.5) * 0.02;
+      const brand = util.pick(data.TRUCK_BRANDS, id);
+      stations.push({
+        id: id, name: brand + ' Travel Center (simulated)', lat: lat, lng: lng,
+        brand: brand, price: dieselPrice(id, lat, lng),
+        amenities: ['Truck parking', 'DEF', 'Scale'],
+        truckStop: true, simulated: true, tags: {},
+        distAlong: m / 1609.344, crossM: 0
+      });
+    }
+    return stations;
+  }
+
+  const fuel = { dieselPrice, stationFromEl, attachCorridor, buildFuelPlan, brandFromName, amenitiesFor, isMajorChain, generateAlong };
   RR.fuel = fuel;
   if (typeof module !== 'undefined' && module.exports) module.exports = fuel;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -2162,7 +2201,33 @@ input, select { font-family: inherit; }
     return shops.slice().sort((a, b) => score(b) - score(a));
   }
 
-  const services = { shopFromEl, attachCorridor, rank, score };
+  /* generate simulated repair shops along a route (offline fallback) */
+  function generateAlong(coords, cum) {
+    const totalM = cum[cum.length - 1] || 0;
+    const shops = [];
+    for (let m = 60 * 1609.344; m < totalM; m += 95 * 1609.344) {
+      const pos = geo.pointAtAlong(coords, cum, m);
+      const id = 'sim-shop-' + Math.round(m / 1609);
+      const lat = pos[0] + (util.hash01(id + ':lat') - 0.5) * 0.02;
+      const lng = pos[1] + (util.hash01(id + ':lng') - 0.5) * 0.02;
+      const rating = Math.min(5, Math.round((3.6 + util.hash01(id + ':rate') * 1.4) * 10) / 10);
+      const svc = [];
+      const pool = data.SHOP_SERVICES.slice();
+      for (let i = 0; i < 3 && pool.length; i++) {
+        const idx = Math.floor(util.hash01(id + ':s' + i) * pool.length);
+        svc.push(pool.splice(idx, 1)[0]);
+      }
+      shops.push({
+        id: id, name: 'Simulated Truck Service #' + Math.round(m / 1609), lat: lat, lng: lng,
+        type: 'sim', typeLabel: 'Truck repair (simulated)', rating: rating, reviews: 8,
+        services: svc, phone: null, truckCapable: true, simulated: true, tags: {},
+        distAlong: m / 1609.344, crossM: 0
+      });
+    }
+    return shops;
+  }
+
+  const services = { shopFromEl, attachCorridor, rank, score, generateAlong };
   RR.services = services;
   if (typeof module !== 'undefined' && module.exports) module.exports = services;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -2281,6 +2346,140 @@ input, select { font-family: inherit; }
     throw new Error('Routing failed on all servers — ' +
       (lastErr && lastErr.message ? lastErr.message + '. ' : '') +
       'Check your internet/firewall.');
+  }
+
+  /* ---------- multiple route options ---------- */
+  async function routeOSRMMulti(o, d, base) {
+    const url = (base || CONFIG.osrm) + o.lng + ',' + o.lat + ';' + d.lng + ',' + d.lat +
+      '?overview=full&geometries=geojson&steps=false&alternatives=true';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Routing server HTTP ' + res.status);
+    const json = await res.json();
+    if (json.code !== 'Ok' || !json.routes || !json.routes.length) throw new Error('Routing server found no route');
+    return json.routes.map(r => ({
+      coords: r.geometry.coordinates.map(c => [c[1], c[0]]),
+      meters: r.distance, seconds: r.duration,
+      engine: 'OSRM (car roads + on-board truck checks)'
+    }));
+  }
+
+  /* last-resort straight-line route so planning never fails when routing APIs are blocked */
+  function straightLineRoute(o, d) {
+    const distM = geo.haversineM([o.lat, o.lng], [d.lat, d.lng]);
+    const n = Math.max(2, Math.ceil(distM / 4000) + 1);
+    const coords = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      coords.push([o.lat + (d.lat - o.lat) * t, o.lng + (d.lng - o.lng) * t]);
+    }
+    return {
+      id: 'fallback', label: 'Direct line (offline)',
+      coords: coords, meters: distM * 1.08, seconds: distM * 1.08 / 10.5,
+      engine: 'Fallback — direct line (live routing blocked)'
+    };
+  }
+
+  async function computeRouteOptions(o, d, truck) {
+    const out = [];
+    if (CONFIG.ors.key) {
+      try {
+        const r = await routeORS(o, d, truck);
+        r.id = 'hgv';
+        r.label = 'Truck-safe (HGV)';
+        out.push(r);
+      } catch (e) {
+        RR.toast('HGV routing failed (' + e.message + ') — using standard options', 'warn');
+      }
+    }
+    const seen = new Set();
+    for (const base of CONFIG.osrmServers) {
+      try {
+        const routes = await routeOSRMMulti(o, d, base);
+        for (const r of routes) {
+          const key = Math.round(r.meters / 50);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (out.length >= 4) break;
+          out.push(r);
+        }
+      } catch (e) { /* try next server */ }
+      if (out.length >= 4 || (out.length >= 2 && !CONFIG.ors.key)) break;
+    }
+    if (!out.length) out.push(straightLineRoute(o, d));
+
+    const byTime = [...out].sort((a, b) => (a.seconds || 1e12) - (b.seconds || 1e12));
+    const fastest = byTime[0];
+    let shortest = null;
+    for (const r of out) if (!shortest || r.meters < shortest.meters) shortest = r;
+    let alt = 1;
+    for (const r of out) {
+      if (r.label) continue;
+      if (r === fastest) r.label = 'Fastest';
+      else if (r === shortest && r !== fastest) r.label = 'Shortest';
+      else r.label = 'Alternate ' + (alt++);
+    }
+    out.forEach((r, i) => { r.id = r.id || 'opt-' + (i + 1); });
+    return out;
+  }
+
+  /* keep single-route API for compatibility */
+  async function computeRoute(o, d, truck) {
+    const opts = await computeRouteOptions(o, d, truck);
+    return opts[0];
+  }
+
+  /* ---------- no-network local fallbacks (clearly labeled as simulated) ---------- */
+  function weighStationsAlongLocal(coords, customWeigh) {
+    const cum = geo.cumulative(coords);
+    const list = [];
+    const seen = new Set();
+    for (const c of data.CURATED_WEIGH) {
+      seen.add(c.id);
+      list.push({ id: c.id, name: c.name, lat: c.lat, lng: c.lng, road: c.road, state: c.state, dir: c.dir, source: 'curated', curated: true });
+    }
+    for (const c of customWeigh || []) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      list.push({ id: c.id, name: c.name, lat: c.lat, lng: c.lng, road: c.road || 'custom POI', source: 'custom', curated: false });
+    }
+    for (const w of list) {
+      const proj = geo.projectOnLine([w.lat, w.lng], coords, cum);
+      if (proj) { w.distAlong = proj.alongM / 1609.344; w.crossM = proj.crossM; }
+    }
+    return list.filter(w => w.crossM != null && w.crossM <= 7000).sort((a, b) => a.distAlong - b.distAlong);
+  }
+
+  async function fuelAlongLocal(coords, customFuel) {
+    const cum = geo.cumulative(coords);
+    const stations = fuel.generateAlong(coords, cum);
+    for (const c of customFuel || []) {
+      const proj = geo.projectOnLine([c.lat, c.lng], coords, cum);
+      if (proj) {
+        stations.push({
+          id: c.id, name: c.name, lat: c.lat, lng: c.lng, brand: c.brand || 'Custom',
+          price: c.price != null ? c.price : fuel.dieselPrice(c.id, c.lat, c.lng),
+          amenities: c.amenities || [], truckStop: false, tags: {},
+          distAlong: proj.alongM / 1609.344, crossM: proj.crossM
+        });
+      }
+    }
+    return stations.filter(s => s.distAlong != null && s.crossM != null).sort((a, b) => a.price - b.price);
+  }
+
+  async function shopsAlongLocal(coords, customShops) {
+    const cum = geo.cumulative(coords);
+    const shops = services.generateAlong(coords, cum);
+    for (const c of customShops || []) {
+      const proj = geo.projectOnLine([c.lat, c.lng], coords, cum);
+      if (proj) {
+        shops.push({
+          id: c.id, name: c.name, lat: c.lat, lng: c.lng, type: 'custom', typeLabel: c.typeLabel || 'Repair shop',
+          rating: c.rating || 5, reviews: c.reviews || 1, services: c.services || [], phone: null,
+          truckCapable: true, tags: {}, distAlong: proj.alongM / 1609.344, crossM: proj.crossM
+        });
+      }
+    }
+    return services.rank(shops.filter(s => s.distAlong != null && s.crossM != null));
   }
 
   /* ---------- clearance / restriction check along route ---------- */
@@ -2507,10 +2706,11 @@ input, select { font-family: inherit; }
   }
 
   const routing = {
-    geocode, computeRoute, routeOSRM, routeORS,
+    geocode, computeRoute, computeRouteOptions, routeOSRM, routeOSRMMulti, routeORS, straightLineRoute,
     analyzeClearances, clearancesAround,
-    weighStationsAlong, weighAround,
-    fuelAlong, fuelAround, shopsAlong, shopsAround
+    weighStationsAlong, weighAround, weighStationsAlongLocal,
+    fuelAlong, fuelAround, fuelAlongLocal,
+    shopsAlong, shopsAround, shopsAlongLocal
   };
   RR.routing = routing;
   if (typeof module !== 'undefined' && module.exports) module.exports = routing;
@@ -2915,7 +3115,8 @@ input, select { font-family: inherit; }
     const off = s.crossM != null ? ' · <b>' + util.fmtMi(s.crossM / 1609.344) + '</b> off route' : '';
     const on = s.distAlong != null ? 'Mile <b>' + util.fmtMi(s.distAlong) + '</b> on route' + off : '';
     return '<b>' + util.esc(s.name) + '</b><br>' +
-      '<span class="big-price" style="font-size:20px">' + util.fmtPrice(s.price) + '</span> /gal diesel <span style="color:#8b98a9">(simulated)</span><br>' +
+      '<span class="big-price" style="font-size:20px">' + util.fmtPrice(s.price) + '</span> /gal diesel <span style="color:#8b98a9">(simulated)</span>' +
+      (s.simulated ? ' <span class="badge badge-red">OFFLINE DATA</span>' : '') + '<br>' +
       '<span class="badge badge-truck">' + util.esc(s.brand) + '</span>' +
       (s.truckStop ? '<span class="badge badge-green">Truck stop</span>' : '') + '<br>' +
       s.amenities.map(a => '<span class="badge badge-blue">' + util.esc(a) + '</span>').join(' ') + '<br>' +
@@ -2942,6 +3143,7 @@ input, select { font-family: inherit; }
   }
   function shopPopup(s) {
     return '<b>' + util.esc(s.name) + '</b><br>' +
+      (s.simulated ? '<span class="badge badge-red">OFFLINE DATA</span>' : '') +
       '<span class="badge badge-blue">' + util.esc(s.typeLabel) + '</span>' +
       '<span class="rating">★ ' + s.rating.toFixed(1) + '</span> <small style="color:#8b98a9">(' + s.reviews + ' reviews · simulated)</small><br>' +
       s.services.slice(0, 4).map(x => '• ' + util.esc(x)).join('<br>') + '<br>' +
@@ -3007,7 +3209,7 @@ input, select { font-family: inherit; }
     const clears = (state.clears || []).filter(c => c.severity === 'danger').length;
     el.classList.remove('hidden');
     el.innerHTML =
-      '<h3>Route summary</h3>' +
+      '<h3>Route summary' + (r.label ? ' <small style="color:#ffb35c">(' + util.esc(r.label) + ')</small>' : '') + '</h3>' +
       '<div class="stat-row"><span>Distance</span><span class="v">' + util.fmtMi(r.meters / 1609.344) + '</span></div>' +
       '<div class="stat-row"><span>Est. drive time</span><span class="v">' + util.fmtClock(r.seconds || (r.meters / 24.6)) + '</span></div>' +
       '<div class="stat-row"><span>Fuel needed</span><span class="v">' + util.fmtGal(gal) + '</span></div>' +
@@ -3120,7 +3322,13 @@ input, select { font-family: inherit; }
     truck.heightM = (truck.heightFt + truck.heightIn / 12) * 0.3048;
     const al = Object.assign({}, CONFIG.alertDistDefaults, util.store.get('alertDist', {}));
     const orsKey = util.store.get('orsKey', '');
-    const theme = util.store.get('theme', 'dark');
+    let theme = util.store.get('theme', 'light');
+    /* one-time migration: the old default was dark — move to readable streets */
+    if (!util.store.get('themeMigrated', false)) {
+      util.store.set('themeMigrated', true);
+      if (theme === 'dark') theme = 'light';
+      util.store.set('theme', theme);
+    }
     CONFIG.ors.key = orsKey || '';
     return { truck: truck, alertWeighMi: al.weighMi, alertClearMi: al.clearMi, orsKey: orsKey, theme: theme };
   }
@@ -3256,7 +3464,8 @@ input, select { font-family: inherit; }
 
   function setTileTheme(theme) {
     if (state.tile) state.map.removeLayer(state.tile);
-    state.tile = L.tileLayer(CONFIG.tiles[theme === 'light' ? 'light' : 'dark'], {
+    const url = CONFIG.tiles[theme] || CONFIG.tiles.light;
+    state.tile = L.tileLayer(url, {
       attribution: CONFIG.tileAttribution, maxZoom: 19
     });
     state.tile.addTo(state.map);
@@ -3458,6 +3667,30 @@ input, select { font-family: inherit; }
     return r;
   }
 
+  /* ---- corridor data with graceful fallback (live -> local simulated) ---- */
+  async function corridorData(planId) {
+    const tasks = [
+      ['clears', () => routing.analyzeClearances(state.coords, state.truck, state.custom.clear)],
+      ['weighs', () => routing.weighStationsAlong(state.coords, state.custom.weigh)],
+      ['fuel', () => routing.fuelAlong(state.coords, state.custom.fuel)],
+      ['shops', () => routing.shopsAlong(state.coords, state.custom.shop)]
+    ];
+    const settled = await Promise.allSettled(tasks.map(t => t[1]()));
+    if (planId !== state.planId) return null;
+    const got = {};
+    const failures = [];
+    settled.forEach((s, i) => {
+      const key = tasks[i][0];
+      if (s.status === 'fulfilled') got[key] = s.value;
+      else { got[key] = []; failures.push(key); }
+    });
+    /* local fallbacks so the app always has something useful */
+    if (!got.weighs.length) got.weighs = routing.weighStationsAlongLocal(state.coords, state.custom.weigh);
+    if (!got.fuel.length) got.fuel = await routing.fuelAlongLocal(state.coords, state.custom.fuel);
+    if (!got.shops.length) got.shops = await routing.shopsAlongLocal(state.coords, state.custom.shop);
+    return { got: got, failures: failures };
+  }
+
   async function planRoute() {
     const originIn = $('#in-origin'), destIn = $('#in-dest');
     if (!originIn.value.trim() || !destIn.value.trim()) {
@@ -3476,114 +3709,141 @@ input, select { font-family: inherit; }
       state.originLL = origin;
       state.destLL = dest;
 
-      /* ---- step 2: compute the route ---- */
+      /* ---- step 2: compute route options ---- */
       ui.setStatus('Step 2/3: routing ' + origin.label.split(',')[0] + ' → ' + dest.label.split(',')[0] + '…');
-      const route = await routing.computeRoute(origin, dest, state.truck);
+      const options = await routing.computeRouteOptions(origin, dest, state.truck);
       if (planId !== state.planId) return;
-      state.route = route;
-      state.coords = route.coords;
-      state.cum = geo.cumulative(route.coords);
-      drawRoute();
-      ui.setStatus('Route ready — step 3/3: checking truck hazards, fuel & services…');
+      state.routeOptions = options;
+      renderOptionChips(options, options[0].id);
 
-      /* ---- step 3: corridor data (non-fatal — route stands on its own) ---- */
-      const tasks = [
-        ['clearances', () => routing.analyzeClearances(state.coords, state.truck, state.custom.clear)],
-        ['weighs', () => routing.weighStationsAlong(state.coords, state.custom.weigh)],
-        ['fuel', () => routing.fuelAlong(state.coords, state.custom.fuel)],
-        ['shops', () => routing.shopsAlong(state.coords, state.custom.shop)]
-      ];
-      const settled = await Promise.allSettled(tasks.map(t => t[1]()));
+      /* ---- step 3: select best option and gather corridor data ---- */
+      ui.setStatus('Step 3/3: checking truck hazards, fuel & services…');
+      await selectRouteOption(options[0].id, planId, true);
       if (planId !== state.planId) return;
-      const got = {};
-      const failures = [];
-      settled.forEach((s, i) => {
-        const key = tasks[i][0];
-        if (s.status === 'fulfilled') got[key] = s.value;
-        else { got[key] = []; failures.push(key + ' (' + (s.reason && s.reason.message ? s.reason.message : 'unavailable') + ')'); }
-      });
 
-      state.clears = got.clearances;
-      state.weighs = got.weighs;
-      state.stations = got.fuel;
-      state.shops = got.shops;
-      addClearMarkers(state.clears);
-      addWeighMarkers(state.weighs);
-      addFuelMarkers(state.stations);
-      addShopMarkers(state.shops);
-
-      state.routeState = {
-        coords: state.coords, cum: state.cum,
-        weighs: state.weighs, clears: state.clears, stations: state.stations, shops: state.shops,
-        truck: state.truck,
-        meters: route.meters, seconds: route.seconds
-      };
-
-      const plan = state.stations.length
-        ? fuel.buildFuelPlan(route.meters, state.stations, state.truck)
-        : null;
-      ui.renderRouteSummary(state);
-      ui.renderFuelPlanCard(plan);
-      ui.renderFuelList(state.stations,
-        state.stations.length
-          ? 'Cheapest diesel along your route (' + state.stations.length + ' stops).'
-          : 'Fuel data unavailable for this route right now — use "Near me" to retry.');
-      ui.renderSvcList(state.shops,
-        state.shops.length
-          ? 'Best-rated repair along your route (' + state.shops.length + ' shops).'
-          : 'Repair shop data unavailable right now — use "Near me" to retry.');
-      $('#btn-clear-route').classList.remove('hidden');
-
-      const danger = state.clears.filter(c => c.severity === 'danger').length;
-      const nearDanger = state.clears.find(c => c.severity === 'danger' && c.distAlong < 2);
       ui.hideOverlay();
-      if (failures.length) {
-        ui.toast('Route OK — some live data skipped', 'warn',
-          'Could not load: ' + failures.join('; ') + '. The route is shown; retry in a moment.');
+      const opt = state.route;
+      if (opt && opt.engine && opt.engine.indexOf('Fallback') === 0) {
+        ui.toast('Live routing blocked — using direct line', 'warn',
+          'External routing APIs are unreachable from this network. Route shown as a straight line; use an ORS key for full routing.');
       }
-      if (nearDanger) {
-        RR.sink.alert({
-          type: 'clear', severity: 'danger',
-          title: 'Route passes ' + nearDanger.name + ' at mile ' + util.fmtMi(nearDanger.distAlong),
-          detail: nearDanger.msg, lat: nearDanger.lat, lng: nearDanger.lng
-        });
-      } else if (danger) {
-        ui.toast('⚠️ ' + danger + ' low clearance(s) on this route', 'warn', 'See map + Alerts tab. Check your truck height matches.');
+      if (options.length > 1) {
+        ui.toast('Route options ready', 'success',
+          'Pick between ' + options.length + ' options: ' + options.map(o => o.label).join(', ') + '.');
       }
-      ui.setStatus('Route ' + util.fmtMi(route.meters / 1609.344) + ' · ' + state.weighs.length + ' weigh stations · ' + danger + ' clearance hazards · ready to drive');
-      ui.toast('Route planned', 'success', util.fmtMi(route.meters / 1609.344) + ' · hit DEMO DRIVE or GPS to start');
     } catch (e) {
       if (planId !== state.planId) return;
       ui.hideOverlay();
       const msg = e && e.message ? e.message : 'Unknown error';
       ui.toast('Route planning failed', 'danger', msg);
       ui.setStatus('Route planning failed — ' + msg);
-      /* eslint-disable-next-line no-console */
       console.error('[RouteRig] route planning error:', e);
+    }
+  }
+
+  async function selectRouteOption(id, planId, initial) {
+    const opt = (state.routeOptions || []).find(o => o.id === id);
+    if (!opt) return;
+    if (state.sim && state.sim.running) state.sim.stop(false);
+    state.route = opt;
+    state.coords = opt.coords;
+    state.cum = geo.cumulative(opt.coords);
+    drawRoute();
+    ui.setStatus('Option "' + opt.label + '" selected — checking hazards, fuel & services…');
+
+    const cd = await corridorData(planId || state.planId);
+    if (!cd) return;
+    const got = cd.got;
+    state.clears = got.clears;
+    state.weighs = got.weighs;
+    state.stations = got.fuel;
+    state.shops = got.shops;
+    state.liveData = { clears: cd.failures.indexOf('clears') === -1, weighs: cd.failures.indexOf('weighs') === -1,
+                       fuel: cd.failures.indexOf('fuel') === -1, shops: cd.failures.indexOf('shops') === -1 };
+
+    addClearMarkers(state.clears);
+    addWeighMarkers(state.weighs);
+    addFuelMarkers(state.stations);
+    addShopMarkers(state.shops);
+
+    state.routeState = {
+      coords: state.coords, cum: state.cum,
+      weighs: state.weighs, clears: state.clears, stations: state.stations, shops: state.shops,
+      truck: state.truck,
+      meters: opt.meters, seconds: opt.seconds
+    };
+
+    const plan = state.stations.length
+      ? fuel.buildFuelPlan(opt.meters, state.stations, state.truck)
+      : null;
+    ui.renderRouteSummary(state);
+    ui.renderFuelPlanCard(plan);
+    ui.renderFuelList(state.stations,
+      state.stations.length
+        ? (state.liveData.fuel
+            ? 'Cheapest diesel along your route (' + state.stations.length + ' stops).'
+            : 'Simulated diesel stops along your route (live fuel data blocked).')
+        : 'No fuel data for this route — use "Near me" to retry.');
+    ui.renderSvcList(state.shops,
+      state.shops.length
+        ? (state.liveData.shops
+            ? 'Best-rated repair along your route (' + state.shops.length + ' shops).'
+            : 'Simulated repair shops along your route (live data blocked).')
+        : 'No repair shops mapped for this route — use "Near me" to retry.');
+    $('#btn-clear-route').classList.remove('hidden');
+
+    const danger = state.clears.filter(c => c.severity === 'danger').length;
+    const nearDanger = state.clears.find(c => c.severity === 'danger' && c.distAlong < 2);
+    if (initial && cd.failures.length) {
+      ui.toast('Route OK — some live data substituted', 'warn',
+        'Blocked here: ' + cd.failures.join(', ') + '. Using simulated/curated data (labeled).');
+    }
+    if (nearDanger) {
+      RR.sink.alert({
+        type: 'clear', severity: 'danger',
+        title: 'Route passes ' + nearDanger.name + ' at mile ' + util.fmtMi(nearDanger.distAlong),
+        detail: nearDanger.msg, lat: nearDanger.lat, lng: nearDanger.lng
+      });
+    } else if (danger) {
+      ui.toast('⚠️ ' + danger + ' low clearance(s) on this route', 'warn', 'See map + Alerts tab. Check your truck height matches.');
+    }
+    ui.setStatus('Option ' + opt.label + ': ' + util.fmtMi(opt.meters / 1609.344) + ' · ' +
+      state.weighs.length + ' weigh stations · ' + danger + ' clearance hazards · ready to drive');
+    if (!initial) {
+      ui.toast('Route option switched', 'success', opt.label + ' · ' + util.fmtMi(opt.meters / 1609.344));
+    }
+  }
+
+  function renderOptionChips(options, selectedId) {
+    const wrap = $('#route-opt-chips');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    $('#route-options').classList.remove('hidden');
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.className = 'chip option-chip' + (o.id === selectedId ? ' option-active' : '');
+      b.innerHTML = '⏱ ' + util.fmtClock(o.seconds) + ' · ' + util.fmtMi(o.meters / 1609.344) +
+        ' — ' + util.esc(o.label);
+      b.title = o.engine || '';
+      b.onclick = () => selectRouteOption(o.id);
+      wrap.appendChild(b);
     }
   }
 
   async function refreshCorridors() {
     if (!state.route) return;
-    try {
-      const [clears, weighs, stations, shops] = await Promise.all([
-        routing.analyzeClearances(state.coords, state.truck, state.custom.clear),
-        routing.weighStationsAlong(state.coords, state.custom.weigh),
-        routing.fuelAlong(state.coords, state.custom.fuel),
-        routing.shopsAlong(state.coords, state.custom.shop)
-      ]);
-      state.clears = clears; state.weighs = weighs; state.stations = stations; state.shops = shops;
-      addClearMarkers(clears); addWeighMarkers(weighs); addFuelMarkers(stations); addShopMarkers(shops);
-      state.routeState.weighs = weighs;
-      state.routeState.clears = clears;
-      state.routeState.stations = stations;
-      ui.renderFuelList(stations, 'Cheapest diesel along your route.');
-      ui.renderSvcList(shops, 'Best-rated repair along your route.');
-      ui.renderRouteSummary(state);
-      ui.renderFuelPlanCard(fuel.buildFuelPlan(state.route.meters, stations, state.truck));
-    } catch (e) {
-      ui.toast('Could not refresh corridor data', 'warn', e.message);
-    }
+    const cd = await corridorData(state.planId);
+    if (!cd) return;
+    const got = cd.got;
+    state.clears = got.clears; state.weighs = got.weighs; state.stations = got.fuel; state.shops = got.shops;
+    addClearMarkers(got.clears); addWeighMarkers(got.weighs); addFuelMarkers(got.fuel); addShopMarkers(got.shops);
+    state.routeState.weighs = got.weighs;
+    state.routeState.clears = got.clears;
+    state.routeState.stations = got.fuel;
+    ui.renderFuelList(got.fuel, 'Cheapest diesel along your route.');
+    ui.renderSvcList(got.shops, 'Best-rated repair along your route.');
+    ui.renderRouteSummary(state);
+    ui.renderFuelPlanCard(fuel.buildFuelPlan(state.route.meters, got.fuel, state.truck));
   }
 
   function clearRoute() {
@@ -3603,6 +3863,9 @@ input, select { font-family: inherit; }
     $('#route-summary').classList.add('hidden');
     $('#fuel-plan-card').classList.add('hidden');
     $('#btn-clear-route').classList.add('hidden');
+    $('#route-options').classList.add('hidden');
+    state.routeOptions = [];
+    state.liveData = null;
     ui.renderFuelList([], 'Plan a route to find cheap diesel along the way.');
     ui.renderSvcList([], 'Plan a route to find repair shops along the way.');
     ui.setStatus('Route cleared.');
@@ -3746,8 +4009,11 @@ input, select { font-family: inherit; }
     });
 
     $('#btn-theme').addEventListener('click', () => {
-      setTileTheme(RR.settings.theme === 'dark' ? 'light' : 'dark');
-      ui.toast('Map theme: ' + RR.settings.theme, 'info');
+      const themes = CONFIG.themes;
+      const cur = themes.indexOf(RR.settings.theme);
+      const next = themes[(cur + 1) % themes.length];
+      setTileTheme(next);
+      ui.toast('Map: ' + (CONFIG.themeNames[next] || next), 'info');
     });
 
     $('#btn-fuel-near-me').addEventListener('click', async () => {
@@ -3870,21 +4136,27 @@ input, select { font-family: inherit; }
   /* ---------- connectivity self-test (informational) ---------- */
   async function diagConnections() {
     const checks = [
-      ['routing', 'https://router.project-osrm.org/route/v1/driving/0,0;0.001,0?overview=false'],
-      ['address lookup', 'https://nominatim.openstreetmap.org/search?format=jsonv2&q=x&limit=1'],
-      ['POI data', 'https://overpass-api.de/api/status']
+      ['routing', 'https://router.project-osrm.org/route/v1/driving/0,0;0.001,0?overview=false', 'cors'],
+      ['lookup', 'https://nominatim.openstreetmap.org/search?format=jsonv2&q=x&limit=1', 'cors'],
+      ['POI', 'https://overpass-api.de/api/status', 'cors'],
+      ['tiles', 'https://tile.openstreetmap.org/4/7/6.png', 'no-cors']
     ];
-    const results = await Promise.allSettled(checks.map(([, url]) => fetch(url, { mode: 'cors' })));
+    const results = await Promise.allSettled(checks.map(([, url, mode]) => fetch(url, { mode: mode })));
+    const flags = [];
     const failed = [];
     results.forEach((r, i) => {
-      const ok = r.status === 'fulfilled' && r.value.ok;
+      /* no-cors "opaque" response still proves the host is reachable */
+      const ok = r.status === 'fulfilled';
+      flags.push(checks[i][0] + (ok ? ' ✓' : ' ✗'));
       if (!ok) failed.push(checks[i][0]);
     });
     if (failed.length === checks.length) {
-      ui.toast('Live data unreachable', 'warn', 'Routing, address lookup and POI data are all blocked — check your internet connection or firewall. You can still explore the map.');
-      ui.setStatus('Live data APIs unreachable — check your internet connection.');
+      ui.toast('Live data unreachable', 'warn', 'All map-data APIs are blocked from this network. The app still works: routes fall back to direct lines and stations are simulated (labeled).');
+      ui.setStatus('🌐 ' + flags.join(' · ') + ' — all live data blocked; using offline fallbacks');
     } else if (failed.length) {
-      ui.setStatus('Note: ' + failed.join(', ') + ' may be unreachable — some features will fall back.');
+      ui.setStatus('🌐 ' + flags.join(' · ') + ' — blocked services fall back automatically');
+    } else {
+      ui.setStatus('🌐 ' + flags.join(' · ') + ' — all live data OK');
     }
   }
 
