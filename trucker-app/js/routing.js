@@ -281,8 +281,8 @@
     const truckH = truck.heightM;
     for (const el of els) {
       const tags = el.tags || {};
-      const h = geo.parseHeightM(tags.maxheight != null ? tags.maxheight : tags['maxheight:physical']);
-      const w = geo.parseWeightLb(tags.maxweight != null ? tags.maxweight : tags['maxweight:physical']);
+      let h = geo.parseHeightM(tags.maxheight != null ? tags.maxheight : tags['maxheight:physical']);
+      let w = geo.parseWeightLb(tags.maxweight != null ? tags.maxweight : tags['maxweight:physical']);
       const geom = (el.geometry && el.geometry.length) ? el.geometry.map(g => [g.lat, g.lon]) : null;
       if (h == null && w == null) continue;
       if (h != null && h >= truckH + CONFIG.maxHeightCautionM) h = null;   // comfortably clear
@@ -332,8 +332,8 @@
     const out = [];
     for (const el of els) {
       const tags = el.tags || {};
-      const h = geo.parseHeightM(tags.maxheight != null ? tags.maxheight : tags['maxheight:physical']);
-      const w = geo.parseWeightLb(tags.maxweight != null ? tags.maxweight : tags['maxweight:physical']);
+      let h = geo.parseHeightM(tags.maxheight != null ? tags.maxheight : tags['maxheight:physical']);
+      let w = geo.parseWeightLb(tags.maxweight != null ? tags.maxweight : tags['maxweight:physical']);
       if (h == null && w == null) continue;
       if (h != null && h >= truck.heightM + CONFIG.maxHeightCautionM) h = null;
       if (w != null && w >= truck.weightLb) w = null;

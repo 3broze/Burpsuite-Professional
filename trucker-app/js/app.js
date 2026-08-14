@@ -324,11 +324,21 @@
     } catch (e) {
       if (planId !== state.planId) return;
       ui.hideOverlay();
-      const msg = e && e.message ? e.message : 'Unknown error';
+      const msg = (e && e.message ? e.message : 'Unknown error') + errWhere(e);
       ui.toast('Route planning failed', 'danger', msg);
       ui.setStatus('Route planning failed — ' + msg);
       console.error('[RouteRig] route planning error:', e);
     }
+  }
+
+  /* locate the failing code position from an error stack (for diagnostics) */
+  function errWhere(e) {
+    if (!e || !e.stack) return '';
+    const frame = e.stack.split('\n').find(l => /\.js:\d+:\d+/.test(l));
+    if (!frame) return '';
+    const short = frame.trim().replace(/^at\s+/, '');
+    const tail = short.split('/').pop();
+    return tail ? ' @ ' + tail : '';
   }
 
   async function selectRouteOption(id, planId, initial) {
